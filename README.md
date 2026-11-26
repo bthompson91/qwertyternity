@@ -85,3 +85,56 @@ fill colour, so the block rows carry the distance shading). Sprites
 have an emoji centre: 🪖 guard, 🎖️ officer, 💀 SS, 🐕 dog, 👹 mutant,
 😈 Hans Grosse, 💊 first aid, 🍗 food, 📦 clip, 🔑 gold key, ✝️ cross,
 🏆 chalice, 📖 bible, 👑 crown, 💰 gold, 💣 bomb, 🛗 elevator exit.
+
+## Doom Eternal glory kills
+
+Damage builds a stagger meter. At 50% of an enemy's max HP in one
+stretch (the meter decays when you're not hitting them) the enemy
+staggers for 3 seconds: frozen, defenceless, flashing gold with a 💀
+over its head, and the HUD shows "STAGGERED — press E for GLORY KILL".
+Walk up and press E in melee range to execute: a 0.9s locked animation
+with a big "💀 GLORY KILL 💀" banner and a per-type execution line
+(SNAPPED HIS NECK / HELMET CRUSH / RIBCAGE RIP / SKULL SPLIT /
+PUNTED INTO NEXT WEEK), +15 HP, a food drop at the corpse, +100 bonus
+score on top of the kill, and 1.5s invulnerability — Eternal's
+execution i-frames. Hans Grosse can't be staggered. Glory kills are
+the health economy, like Eternal: the counter is in the HUD.
+
+## Doom weapons (all 8 originals) + Eternal meat hook
+
+The old Knife / Pistol / SMG / Shotgun / Chaingun set is replaced by
+all eight original Doom weapons, with Doom's exact damage tables
+(step x (1 + rndT()%n)), Doom's tic rates and Doom's four ammo types
+with Doom's caps (bullets 200, shells 50, rockets 50, cells 300).
+Doom weapons have no magazines and no reload — they fire straight
+from the reserve, and semi-auto weapons (fist, pistol, shotgun, SSG,
+rocket, BFG) need a fresh press per shot while the chaingun and
+plasma gun fire while held.
+
+- **1 Fist** — 2-20, melee, no ammo.
+- **2 Pistol** — 5-15, 1 bullet.
+- **3 Shotgun** — 7 pellets x 5-15, 1 shell.
+- **4 Super Shotgun** (Doom 2) — 20 pellets x 5-15, 2 shells.
+- **5 Chaingun** — 5-15, 1 bullet, auto.
+- **6 Rocket Launcher** — projectile, 20-160 direct + blast up to
+  128 falling off over 2 tiles, 1 rocket.
+- **7 Plasma Gun** — projectile, 5-40, 1 cell, auto.
+- **8 BFG9000** — projectile, ball impact 100-800 + 40 invisible
+  tracers at 15 each in a 45-degree cone out to 12 tiles, 40 cells.
+
+Ammo pickups use Doom's values: clip +10 bullets, shell box +4,
+rocket box +5, cell pack +20. SS enemies drop shells. Starting ammo:
+50 bullets, 16 shells, 10 rockets, 80 cells.
+
+**Meat hook (Doom Eternal Super Shotgun mod)** — press **F**
+(gamepad X, HOOK button) with the Super Shotgun equipped: a chain
+latches onto the nearest enemy within 12 tiles in your facing cone
+and pulls you to it at 14 tiles/s, dealing 20 damage and setting it
+burning (Flaming Hook mastery: a burning enemy that dies drops +15
+armor). 3s cooldown, 2s if it misses. The chain is drawn as 🔗 cells
+across the screen while you're latched.
+
+Deliberate differences from Doom: no rocket self-damage (close
+rockets don't hurt you); SSG rate is 1.0s not Doom's ~1.5s pump
+cycle; rocket blast radius is 2 tiles not Doom's 1; each BFG tracer
+hits an enemy once (in Doom all 40 can pile onto one target).
