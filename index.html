@@ -28,7 +28,7 @@
 <div id="wrap">
 <h1>QWERTY<span>STEIN</span> — dense ASCII raycaster</h1>
 <p class="sub">Procedurally generated castle. Every run is a new seed. Die, and the run is gone. Clear a floor, pick an upgrade, go deeper.</p>
-<canvas id="game" width="1040" height="588"></canvas>
+<canvas id="game" width="1080" height="600"></canvas>
 <div id="touch">
   <div class="pad" id="stick"><span class="lbl">MOVE</span><div class="nub" id="stickNub"></div></div>
   <div class="pad" id="lookpad"><span class="lbl">LOOK — drag, tap = fire</span><div class="nub" id="lookNub"></div></div>
@@ -39,7 +39,7 @@
 <div id="padstat"></div>
 <pre id="keys"><b>WASD</b> move &nbsp; <b>Mouse</b> look (click to lock) &nbsp; <b>← →</b> turn &nbsp; <b>Click / Space</b> shoot
 <b>1-5</b> weapons: 1 Knife  2 Pistol  3 SMG  4 Shotgun  5 Chaingun &nbsp; <b>R</b> reload &nbsp; <b>Shift</b> run
-<b>Q</b> dash &nbsp; <b>T</b> throw bomb &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>N</b> new run (on death)
+<b>Q</b> dash &nbsp; <b>T</b> throw bomb &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>N</b> new run (on death) &nbsp; <b>E</b> use (door / pushwall / elevator)
 <b>QWERTY tip:</b> strafe with <b>Q/E</b>? No — Q is dash, E is nothing. Strafe is A/D while turning with the mouse. That's the QWERTYSTEIN way.
 Find the glowing <b>[EXIT]</b> portal on each floor. Kills give XP. Level up: press <b>1 / 2 / 3</b> to pick an upgrade.
 <b>Phone:</b> left pad = move stick, right pad = drag to look (tap it to fire), FIRE / DASH / BOMB buttons below. Also works by touch on the game itself: left half drag = move, right half drag = look, tap right = fire.
@@ -51,10 +51,44 @@ Find the glowing <b>[EXIT]</b> portal on each floor. Kills give XP. Level up: pr
 // Dense ASCII raycaster. No build step, no assets, no libraries.
 // One canvas, one character cell per ray column slice, wall textures
 // drawn as 8x8 ASCII tiles, sprites as ASCII billboards.
+//
+// GAMEPLAY LOGIC PORTED FROM WOLFENSTEIN 3D (id Software, 1992,
+// source released 1995, WOLFSRC/ in id-Software/wolf3d):
+//   WL_DEF.H  — MAPSIZE 64, MAXDOORS 64, TILEGLOBAL, PLAYERSIZE,
+//               EXTRAPOINTS 40000, PUSHABLETILE 98, EXITTILE 99,
+//               ELEVATORTILE 21, AMBUSHTILE 106
+//   WL_ACT2.C — starthitpoints: guard 25, officer 50, SS 100, dog 1,
+//               mutant 45-65, Hans 850; KillActor scores/drops
+//   WL_STATE.C— enemy state machine: T_Stand / T_Path / T_Chase /
+//               T_Shoot / T_DogChase / T_Bite, SightPlayer reaction
+//               delays, FirstSighting speed multipliers, CheckLine,
+//               shoot hit-chance and damage tables, pain doubling
+//   WL_AGENT.C— GunAttack hitscan pick + damage by distance,
+//               KnifeAttack (1.5 tiles, Rnd>>4), ClipMove wall
+//               sliding, Cmd_Use (doors / pushwalls / elevator),
+//               GetBonus treasure/health/ammo values, GiveExtraMan
+//   WL_ACT1.C — sliding doors (dr_open/dr_opening/dr_closing,
+//               OPENTICS 300, locks 1-4), PushWall (slides 2 tiles)
+// This is an original implementation of those mechanics in JS —
+// the design, constants and state names are Wolf3D's; the code
+// here is written for this game, not copied verbatim.
 // ============================================================
-const COLS=104, ROWS=42, CW=10, CH=14;
+// Wolf3D helpers: US_RndT() is a uniform 0..255 roll.
+function rndT(){ return (Math.random()*256)|0; }
+const WOLF={
+  MAPSIZE:64, MAXDOORS:64, TILEGLOBAL:1, PLAYERSIZE:0.34, MINACTORDIST:1,
+  EXTRAPOINTS:40000, PUSHABLETILE:98, EXITTILE:99, ELEVATORTILE:21,
+  AMBUSHTILE:106, OPENTICS:300, // tics at 70Hz; door stays open ~3-4s
+  // GunAttack damage (WL_AGENT.C): dist in tiles, Rnd = rndT()
+  gunDamage(dist){ const r=rndT(); if(dist<2) return r/4; if(dist<4) return r/6; if(r/12<dist) return 0; return r/6; },
+  knifeDamage(){ return rndT()>>4; }, // 0..15
+  // T_Shoot hit chance (WL_STATE.C): dist tiles, running = player sprinting
+  shootHitChance(dist, running, visible){ let c; if(running) c=visible?160-dist*16:160-dist*8; else c=visible?256-dist*16:256-dist*8; return Math.max(0,Math.min(255,c)); },
+  shootDamage(dist){ const r=rndT(); if(dist<2) return r>>2; if(dist<4) return r>>3; return r>>4; },
+};
+const COLS=180, ROWS=75, CW=6, CH=8; // 13,500 cells — 3.09x the old 104x42 (4,368)
 const cv=document.getElementById('game'), ctx=cv.getContext('2d');
-ctx.font='bold 13px ui-monospace, Menlo, Consolas, monospace';
+ctx.font='bold 8px ui-monospace, Menlo, Consolas, monospace';
 ctx.textBaseline='top';
 // --- RNG (mulberry32, seeded per run / per floor) ---
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -77,6 +111,8 @@ const WALL_ART={
  3:["||||||||","||||||||","--------","||||||||","||||||||","--------","||||||||","||||||||"], // wood
  4:["::::::::","::  ::::","::::::::","::::  ::","::::::::","::  ::::","::::::::","::::  ::"], // metal
  5:["@@@@@@@@","@  @@  @","@@@@@@@@","@  @@  @","@@@@@@@@","@  @@  @","@@@@@@@@","@  @@  @"], // vault
+ 6:["|######|","|######|","|##  ##|","|##  ##|","|######|","|######|","|##  ##|","|######|"], // Wolf3D sliding door (tile 90-101)
+ 7:["%%%%%%%%","%  %%  %","%%%%%%%%","%  %%  %","%%%%%%%%","%  %%  %","%%%%%%%%","%  %%  %"], // pushwall (PUSHABLETILE 98)
 };
 const SHADE=['#ffffff','#e8e8e8','#c8c8c8','#a0a0a0','#787878','#585858','#383838','#222222'];
 function shadeColor(hex, dist){
@@ -153,13 +189,38 @@ const SPRITES={
  bomb:["  O  "," OOO ","OOOOO"," OOO ","  O  "],
  exit:[" [ ] ","[   ]","[ E ]","[   ]"," [ ] "],
  key:["  K  "," KKK ","  K  ","  K  ","  K  "],
+ ss:[
+ "  ___  ",
+ " /###/ ",
+ "| o o |",
+ " |___| ",
+ "  |#|  ",
+ " /| |/ ",
+ "  | |  ",
+ " _| |_ "],
+ cross:["  +  "," +++ ","+++++"," +++ ","  +  "],
+ chalice:["  Y  "," \\|/ ","  |  "," \\_/ ","     "],
+ bible:[" ___ ","|___|","|___|","|___|","     "],
+ crown:["/\\/\\/\\","|    |","|____|","     ","     "],
+ firstaid:["     "," +++ ","+++++"," +++ ","     "],
+ food:[" ( ) ","(   )","(   )"," ( ) ","     "],
+ clip:[" AAA ","A A A"," AAA ","  A  ","     "],
+ key1:["  K  "," KKK ","  K  ","  K  ","  K  "],
 };
+// Enemy stats straight from WL_ACT2.C starthitpoints + WL_STATE.C KillActor.
+// Speeds are Wolf3D chase multipliers over SPDPATROL 512 (guard x3,
+// officer x5, SS x4, mutant x3, dog x2 at SPDDOG 1500); patrol speed is
+// the base, chase is the multiplier — ported here as tiles/sec.
+// Scores: guard 100, officer 400, SS 500, dog 200, mutant 700, Hans 5000.
+// Drops: guard/officer/SS/mutant drop a clip (+4 ammo); SS drops the
+// machine gun if the player lacks it; Hans drops the gold key.
 const ENEMY_TYPES={
- guard:  {hp:30, dmg:7,  speed:1.1, range:7, xp:10, score:100, color:'#d8b060', spr:'guard',   fire:1.6},
- dog:    {hp:20, dmg:6,  speed:2.3, range:1.4, xp:12, score:150, color:'#c09070', spr:'dog',   fire:0.9},
- officer:{hp:55, dmg:12, speed:1.5, range:8, xp:20, score:250, color:'#a0c0e0', spr:'officer', fire:1.3},
- mutant: {hp:90, dmg:16, speed:1.0, range:6, xp:30, score:400, color:'#80d080', spr:'mutant', fire:1.8},
- boss:   {hp:260,dmg:20, speed:1.3, range:9, xp:100,score:1500,color:'#e06060', spr:'boss',   fire:1.1},
+ guard:  {hp:25, dmg:7,  speed:1.1, patrol:0.55, chaseMul:3, range:7, xp:10, score:100, color:'#d8b060', spr:'guard',   fire:1.6, reaction:4},
+ dog:    {hp:1,  dmg:6,  speed:2.3, patrol:1.5,  chaseMul:2, range:1.4, xp:12, score:200, color:'#c09070', spr:'dog',   fire:0.9, reaction:8},
+ officer:{hp:50, dmg:12, speed:1.5, patrol:0.55, chaseMul:5, range:8, xp:20, score:400, color:'#a0c0e0', spr:'officer', fire:1.3, reaction:2},
+ ss:     {hp:100,dmg:14, speed:1.4, patrol:0.55, chaseMul:4, range:8, xp:35, score:500, color:'#b0b0b0', spr:'ss',      fire:1.1, reaction:6, shots:4},
+ mutant: {hp:55, dmg:16, speed:1.0, patrol:0.55, chaseMul:3, range:6, xp:30, score:700, color:'#80d080', spr:'mutant', fire:1.8, reaction:6, shots:2},
+ boss:   {hp:850,dmg:20, speed:1.3, patrol:0.55, chaseMul:3, range:9, xp:100,score:5000,color:'#e06060', spr:'boss',   fire:1.1, reaction:1, name:'HANS GROSSE'},
 };
 // --- roguelike upgrades (offered 3 at a time on level-up and floor clear) ---
 const UPGRADES=[
@@ -198,7 +259,9 @@ function beep(f,d,type,g){ if(muted) return; try{ AC=AC||new (window.AudioContex
 function sfx(n){ if(n==='shoot')beep(180,0.08,'square',0.06); if(n==='shotgun')beep(90,0.18,'sawtooth',0.09); if(n==='hit')beep(320,0.05,'square',0.04); if(n==='hurt')beep(70,0.2,'sawtooth',0.09); if(n==='pickup')beep(660,0.09,'sine',0.06); if(n==='level') {beep(523,0.1,'sine',0.06); setTimeout(()=>beep(784,0.15,'sine',0.06),90);} if(n==='die')beep(50,0.4,'sawtooth',0.08); if(n==='exit') {beep(440,0.1,'sine',0.06); setTimeout(()=>beep(660,0.1,'sine',0.06),100); setTimeout(()=>beep(880,0.2,'sine',0.06),200);} }
 // --- game state ---
 let state='title'; // title | play | levelup | floorclear | dead | paused
-let player, grid, mapW, mapH, enemies, items, depth, runSeed, theme, logs=[];
+let player, grid, mapW, mapH, enemies, items, doors, pushwalls, depth, runSeed, theme, logs=[];
+// Wolf3D doorobj_t / PushWall state (WL_ACT1.C): doors slide 0->1, close
+// after OPENTICS; a pushwall slides 2 tiles into the room beyond.
 let levelChoices=[], levelUpPending=0, floorClearPending=false;
 let keys={}, mouseDX=0, firing=false, lastTime=0, flash=0, shake=0, dashTime=0;
 // touch: virtual stick (move) + look drag. stickVec is -1..1, lookDX accumulates px.
@@ -216,7 +279,7 @@ let zbuf=new Float32Array(COLS);
 function log(m){ logs.unshift(m); logs=logs.slice(0,4); }
 function newRun(){
   runSeed=(Math.random()*1e9)|0;
-  depth=1; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,mags:[Infinity,12,32,6,60],kills:0,score:0,gold:0,dead:false};
+  depth=1; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,mags:[Infinity,12,32,6,60],kills:0,score:0,gold:0,dead:false,keys:0,extraLives:0,nextExtra:40000};
   for(const w of WEAPONS){ w.ammo = w.key==='1'?Infinity : w.key==='2'?Infinity : w.key==='3'?120 : w.key==='4'?40 : 200; }
   player.mags=[Infinity,12,32,6,60];
   genLevel(1);
@@ -225,19 +288,20 @@ function newRun(){
 function genLevel(d){
   depth=d; theme=THEMES[(d-1)%THEMES.length];
   rng=mulberry32(runSeed + d*7919);
-  mapW=36; mapH=36;
+  // Wolf3D: MAPSIZE 64 — maps are forced 64x64 (WL_GAME.C SetupGameLevel)
+  mapW=WOLF.MAPSIZE; mapH=WOLF.MAPSIZE;
   grid=[]; for(let y=0;y<mapH;y++){ grid.push(new Array(mapW).fill(1)); }
+  doors=[]; pushwalls=[]; items=[];
   // rooms
   const rooms=[];
-  for(let tries=0; tries<120 && rooms.length<10; tries++){
-    const w=ri(4,9), h=ri(4,7), x=ri(1,mapW-w-1), y=ri(1,mapH-h-1);
+  for(let tries=0; tries<300 && rooms.length<14; tries++){
+    const w=ri(4,10), h=ri(4,8), x=ri(1,mapW-w-1), y=ri(1,mapH-h-1);
     let ok=true;
     for(const r of rooms) if(x<r.x+r.w+1 && x+w+1>r.x && y<r.y+r.h+1 && y+h+1>r.y){ ok=false; break; }
     if(!ok) continue;
     rooms.push({x,y,w,h,cx:x+(w>>1), cy:y+(h>>1)});
     for(let yy=y;yy<y+h;yy++) for(let xx=x;xx<x+w;xx++) grid[yy][xx]=0;
   }
-  // corridors: connect room centres in order, plus a couple of loops
   function corridor(x0,y0,x1,y1){
     let x=x0,y=y0;
     while(x!==x1){ grid[y][x]=0; x+=Math.sign(x1-x); }
@@ -246,35 +310,85 @@ function genLevel(d){
   }
   for(let i=1;i<rooms.length;i++) corridor(rooms[i-1].cx,rooms[i-1].cy,rooms[i].cx,rooms[i].cy);
   corridor(rooms[0].cx,rooms[0].cy,rooms[rooms.length-1].cx,rooms[rooms.length-1].cy);
-  // wall types: carve walls get a type by position hash so textures vary
+  // wall types
   for(let y=0;y<mapH;y++) for(let x=0;x<mapW;x++) if(grid[y][x]===1){
-    grid[y][x]=1+((x*7+y*13+d)%4); // 1..4, vault on deep floors
+    grid[y][x]=1+((x*7+y*13+d)%4);
     if(d>=5 && ((x*5+y*3)%9===0)) grid[y][x]=5;
+  }
+  // --- Wolf3D sliding doors (WL_ACT1.C, tiles 90-101, MAXDOORS 64) ---
+  // A door sits in a 1-wide corridor gap: floor east+west with walls
+  // north+south (vertical door), or the reverse (horizontal).
+  for(let y=1;y<mapH-1 && doors.length<8;y++) for(let x=1;x<mapW-1 && doors.length<8;x++){
+    if(grid[y][x]!==0) continue;
+    const vert = grid[y-1][x]>0 && grid[y+1][x]>0 && grid[y][x-1]===0 && grid[y][x+1]===0;
+    const horiz = grid[y][x-1]>0 && grid[y][x+1]>0 && grid[y-1][x]===0 && grid[y+1][x]===0;
+    if(!vert && !horiz) continue;
+    if(rng()>0.22) continue;
+    // one locked door per floor after the first (lock 1 = gold key)
+    const lock = (d>1 && doors.length===0) ? 1 : 0;
+    doors.push({x,y,vertical:vert,lock,position:0,action:'closed',timer:0});
+    grid[y][x]=90; // door tile
+  }
+  // --- Wolf3D pushwall secret (WL_ACT1.C, PUSHABLETILE 98) ---
+  // Carve a 2x2 secret alcove in solid rock off a random room, fill it
+  // with treasure; the wall between room and alcove is the pushwall.
+  // Cmd_Use (E) facing it slides it 2 tiles and opens the alcove.
+  {
+    const r=pick(rooms.slice(1));
+    const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+    for(const [dx,dy] of shuffle(dirs.slice())){
+      const wx=r.cx+dx*((r.w>>1)+1), wy=r.cy+dy*((r.h>>1)+1);
+      const ax=wx+dx*2, ay=wy+dy*2;
+      if(ax<2||ay<2||ax>=mapW-3||ay>=mapH-3) continue;
+      if(grid[wy][wx]<=0 || grid[ay][ax]<=0 || grid[ay+1][ax]<=0) continue;
+      // alcove must be fully solid before carving
+      let solid=true;
+      for(let yy=ay-1;yy<=ay+1;yy++) for(let xx=ax-1;xx<=ax+1;xx++) if(grid[yy][xx]===0) solid=false;
+      if(!solid) continue;
+      grid[wy][wx]=98; // pushwall marker tile
+      pushwalls.push({x:wx,y:wy,dx,dy,state:0,moving:false,timer:0});
+      for(let yy=ay;yy<ay+2;yy++) for(let xx=ax;xx<ax+2;xx++) grid[yy][xx]=0;
+      // secret treasure, Wolf3D values (GetBonus): crown 5000, bible 1000
+      // (kept off the pushwall's slide path, which ends at ax,ay)
+      items.push({x:ax+1.5,y:ay+1.5,kind:'crown'});
+      items.push({x:ax+1.5,y:ay+0.5,kind:'bible'});
+      items.push({x:ax+0.5,y:ay+1.5,kind:'chalice'});
+      log('A wall here looks… pushable. (Press E facing it)');
+      break;
+    }
   }
   // player start: first room centre
   player.x=rooms[0].cx+0.5; player.y=rooms[0].cy+0.5; player.ang=rng()*Math.PI*2;
-  // exit: farthest room from start
+  // exit: farthest room — Wolf3D ELEVATORTILE 21 + EXITTILE 99.
+  // The elevator is a floor tile; press E facing it, or step on it.
   let far=rooms[0], fd=-1;
   for(const r of rooms){ const dd=(r.cx-player.x)**2+(r.cy-player.y)**2; if(dd>fd){fd=dd;far=r;} }
-  items=[{x:far.cx+0.5,y:far.cy+0.5,kind:'exit'}];
+  // ELEVATORTILE 21 sits here (floor stays walkable; exit item marks it)
+  items.push({x:far.cx+0.5,y:far.cy+0.5,kind:'exit'});
   enemies=[];
-  const nE=Math.min(6+d*2, 26);
-  const types = d===1?['guard','dog'] : d===2?['guard','dog','officer'] : d%3===0?['guard','officer','mutant','dog'] : ['guard','dog','officer','mutant'];
+  const nE=Math.min(10+d*3, 40);
+  const types = d===1?['guard','dog'] : d===2?['guard','dog','officer'] : d%3===0?['guard','officer','ss','mutant','dog'] : ['guard','dog','officer','ss','mutant'];
   for(let i=0;i<nE;i++){
     const r=pick(rooms); if(r===rooms[0]) continue;
     const t=pick(types);
     const base=ENEMY_TYPES[t];
     const hpScale=1+(d-1)*0.18;
-    enemies.push({x:r.cx+rr(-1,1), y:r.cy+rr(-1,1), type:t, hp:base.hp*hpScale, maxHp:base.hp*hpScale, dmg:base.dmg*(1+(d-1)*0.08), speed:base.speed*rr(0.9,1.1), fire:0, wander:rr(0,6), ang:rr(0,6.28), flash:0, dead:false});
+    // AMBUSHTILE 106: some enemies only wake on sight, never on noise
+    enemies.push({x:r.cx+rr(-1,1), y:r.cy+rr(-1,1), type:t, hp:base.hp*hpScale, maxHp:base.hp*hpScale, dmg:base.dmg*(1+(d-1)*0.08), speed:base.speed*rr(0.9,1.1), patrol:base.patrol, fire:0, wander:rr(0,6), ang:rr(0,6.28), flash:0, dead:false,
+      state:'stand', stateTics:0, attackMode:false, reaction:0, ambush:rng()<0.25, dir:ri(0,3), shotsLeft:0});
   }
-  if(d%3===0){ const r=far; enemies.push({x:r.cx+0.5,y:r.cy+1.5,type:'boss',hp:ENEMY_TYPES.boss.hp*(1+(d-1)*0.15),maxHp:ENEMY_TYPES.boss.hp*(1+(d-1)*0.15),dmg:ENEMY_TYPES.boss.dmg,speed:1.3,fire:0,wander:0,ang:0,flash:0,dead:false}); }
-  // loot in rooms
+  if(d%3===0){ const r=far; enemies.push({x:r.cx+0.5,y:r.cy+1.5,type:'boss',hp:ENEMY_TYPES.boss.hp,maxHp:ENEMY_TYPES.boss.hp,dmg:ENEMY_TYPES.boss.dmg,speed:1.3,patrol:0.55,fire:0,wander:0,ang:0,flash:0,dead:false,state:'stand',stateTics:0,attackMode:false,reaction:0,ambush:false,dir:0,shotsLeft:0}); }
+  // loot in rooms — Wolf3D GetBonus values: cross 100, chalice 500,
+  // bible 1000, crown 5000; first aid +25, food +10, clip +8
   for(const r of rooms){
     if(r===rooms[0]) continue;
     const n=ri(0,2);
-    for(let i=0;i<n;i++) items.push({x:r.x+rr(0.5,r.w-0.5), y:r.y+rr(0.5,r.h-0.5), kind:pick(['health','ammo','gold','gold','bomb','key'])});
+    for(let i=0;i<n;i++) items.push({x:r.x+rr(0.5,r.w-0.5), y:r.y+rr(0.5,r.h-0.5), kind:pick(['firstaid','food','clip','cross','cross','chalice','bomb','key1'])});
   }
-  log('FLOOR '+d+' — '+theme.name+' — '+rooms.length+' rooms, '+enemies.length+' hostiles. Seed '+(runSeed+d*7919));
+  // gold key (bo_key1) — Hans drops it too; one is placed so the locked
+  // door on this floor can be opened
+  if(d>1){ const r=pick(rooms.slice(1)); items.push({x:r.cx+0.5,y:r.cy+0.5,kind:'key1'}); }
+  log('FLOOR '+d+' — '+theme.name+' — '+rooms.length+' rooms, '+enemies.length+' hostiles, '+doors.length+' doors. Seed '+(runSeed+d*7919));
 }
 function offerChoices(n){
   levelChoices=shuffle(UPGRADES.slice()).slice(0,n); choiceSel=0;
@@ -292,6 +406,8 @@ function los(x0,y0,x1,y1){
   for(let i=1;i<steps;i++){ const x=x0+dx*i/steps, y=y0+dy*i/steps; if(grid[Math.floor(y)] && grid[Math.floor(y)][Math.floor(x)]>0) return false; }
   return true;
 }
+function doorAt(x,y){ for(const d of doors) if(d.x===x&&d.y===y) return d; return null; }
+function isDoorOpen(x,y){ const d=doorAt(x,y); return d&&d.position>=0.9; }
 function castRay(angle){
   const dx=Math.cos(angle), dy=Math.sin(angle);
   let mapX=Math.floor(player.x), mapY=Math.floor(player.y);
@@ -304,7 +420,13 @@ function castRay(angle){
     if(sDX<sDY){sDX+=dDX;mapX+=stepX;side=0}else{sDY+=dDY;mapY+=stepY;side=1}
     if(mapX<0||mapY<0||mapX>=mapW||mapY>=mapH) return {dist:64,side:0,type:1,tex:0};
     const t=grid[mapY][mapX];
-    if(t>0){ const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:t,tex:wallX-Math.floor(wallX)}; }
+    if(t>0){
+      // Wolf3D doors (tile 90): an open door is not a wall — the ray
+      // passes through (DoorOpening connects the areas, WL_ACT1.C)
+      if(t===90){ const dr=doorAt(mapX,mapY); if(dr&&dr.position>=0.9){ /* open: keep tracing */ } else { const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:6,tex:wallX-Math.floor(wallX)}; } }
+      else if(t===98){ const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:7,tex:wallX-Math.floor(wallX)}; }
+      else { const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:t,tex:wallX-Math.floor(wallX)}; }
+    }
   }
   return {dist:64,side:0,type:1,tex:0};
 }
@@ -324,8 +446,37 @@ function completeReload(){
   else player.mags[player.weapon]=w.mag;
   reloading=false; log('Reloaded '+w.name);
 }
+// Wolf3D FirstSighting (WL_STATE.C): enemy wakes, speed multiplier
+// applies, it goes to chase. Reaction delay is set on first sight.
+function firstSighting(e){
+  e.attackMode=true;
+  const base=ENEMY_TYPES[e.type];
+  e.speed=base.speed; // chase speed (already the chase value in our table)
+  e.state='chase'; e.stateTics=0;
+}
+// Wolf3D KillActor (WL_STATE.C) + GivePoints / GiveExtraMan (WL_AGENT.C):
+// score, drops, and every EXTRAPOINTS 40000 an extra life.
+function givePoints(n){
+  player.score+=n;
+  while(player.score>=player.nextExtra){
+    player.nextExtra+=WOLF.EXTRAPOINTS; player.extraLives++;
+    log('EXTRA LIFE! ('+player.extraLives+' in reserve)'); sfx('level');
+  }
+}
+function killEnemy(e, crit){
+  e.dead=true; e.state='die'; player.kills++;
+  givePoints(ENEMY_TYPES[e.type].score);
+  gainXp(ENEMY_TYPES[e.type].xp);
+  log((crit?'CRIT! ':'')+'Killed '+(ENEMY_TYPES[e.type].name||e.type.toUpperCase())+' +'+ENEMY_TYPES[e.type].xp+' XP');
+  // Drops (WL_STATE.C KillActor): clip +4, SS drops machine gun if the
+  // player lacks it, Hans drops the gold key
+  if(e.type==='boss'){ items.push({x:e.x,y:e.y,kind:'key1'}); items.push({x:e.x+0.4,y:e.y,kind:'firstaid'}); log('HANS GROSSE IS DOWN — gold key dropped'); }
+  else if(Math.random()<0.5) items.push({x:e.x,y:e.y,kind:'clip'});
+}
 function tryShoot(){
   if(state!=='play'||reloadT>0||shootCd>0) return;
+  // madenoise (WL_AGENT.C): gunfire wakes enemies in the area
+  for(const e of enemies){ if(!e.dead&&!e.ambush&&Math.hypot(e.x-player.x,e.y-player.y)<9) firstSighting(e); }
   const w=WEAPONS[player.weapon];
   if(player.mags[player.weapon]<=0){ sfx('hit'); startReload(); return; }
   shootCd=w.rate*player.rateMul;
@@ -343,18 +494,26 @@ function tryShoot(){
       if(Math.abs(da)<0.09+0.35/d && los(player.x,player.y,e.x,e.y) && d<bestD){ best=e; bestD=d; }
     }
     if(best){
-      let dmg=w.dmg*player.dmgMul*(1-bestD/w.range*0.4);
+      // Wolf3D GunAttack damage by distance (WL_AGENT.C), knife by
+      // KnifeAttack. Damage is DOUBLED if the enemy is not yet in
+      // attack mode (DamageActor, WL_STATE.C) — a stealth bonus.
+      let dmg;
+      if(player.weapon===0) dmg=WOLF.knifeDamage();
+      else dmg=WOLF.gunDamage(bestD);
+      if(!best.attackMode) dmg*=2;
+      dmg*=player.dmgMul;
       let crit=false;
       if(Math.random()<player.crit){ dmg*=2; crit=true; }
       best.hp-=dmg; best.flash=0.12;
+      // DamageActor: a surviving non-attack-mode enemy is forced into
+      // chase via FirstSighting; survivors go to pain (10 tics) —
+      // dogs have no pain state (1 HP, WL_STATE.C)
+      if(!best.attackMode) firstSighting(best);
+      else if(best.type!=='dog'&&best.hp>0){ best.state='pain'; best.stateTics=10; }
       if(player.lifesteal) player.hp=Math.min(player.maxHp, player.hp+dmg*player.lifesteal);
       sfx('hit');
       if(best.hp<=0){
-        best.dead=true; player.kills++; player.score+=ENEMY_TYPES[best.type].score;
-        gainXp(ENEMY_TYPES[best.type].xp);
-        log((crit?'CRIT! ':'')+'Killed '+best.type.toUpperCase()+' +'+ENEMY_TYPES[best.type].xp+' XP');
-        if(Math.random()<0.3) items.push({x:best.x,y:best.y,kind:pick(['health','ammo','gold','bomb'])});
-        if(best.type==='boss'){ items.push({x:best.x,y:best.y,kind:'gold'}); items.push({x:best.x+0.4,y:best.y,kind:'health'}); log('BOSS DOWN — loot dropped'); }
+        killEnemy(best, crit);
       }
     }
   }
@@ -364,14 +523,22 @@ function throwBomb(){
   if(state!=='play'||player.bombs<=0) return;
   player.bombs--; flash=0.15; shake=2; sfx('shotgun');
   let hit=0;
-  for(const e of enemies){ if(e.dead) continue; const d=Math.hypot(e.x-player.x,e.y-player.y); if(d<4){ e.hp-=70*player.dmgMul; e.flash=0.2; hit++; if(e.hp<=0){e.dead=true;player.kills++;player.score+=ENEMY_TYPES[e.type].score;gainXp(ENEMY_TYPES[e.type].xp);} } }
+  for(const e of enemies){ if(e.dead) continue; const d=Math.hypot(e.x-player.x,e.y-player.y); if(d<4){ e.hp-=70*player.dmgMul; e.flash=0.2; hit++; if(e.hp<=0) killEnemy(e,false); } }
   log('BOMB! '+hit+' hostiles caught');
 }
 function hurtPlayer(dmg, from){
   if(dashTime>0) return;
   const absorbed=Math.min(player.armor, dmg*0.6); player.armor-=absorbed;
   player.hp-= (dmg-absorbed); flash=0.15; shake=Math.max(shake,1); sfx('hurt');
-  if(player.hp<=0){ player.hp=0; state='dead'; sfx('die'); saveBest(); }
+  if(player.hp<=0){
+    // GiveExtraMan (WL_AGENT.C): an extra life revives you
+    if(player.extraLives>0){
+      player.extraLives--; player.hp=50; player.armor=0;
+      log('EXTRA LIFE USED — back on your feet at 50 HP ('+player.extraLives+' left)');
+      sfx('level'); return;
+    }
+    player.hp=0; state='dead'; sfx('die'); saveBest();
+  }
 }
 function saveBest(){
   try{
@@ -430,6 +597,47 @@ function update(dt){
   if(state!=='play') return;
   shootCd-=dt; if(reloadT>0){ reloadT-=dt; if(reloadT<=0) completeReload(); } flash-=dt; shake=Math.max(0,shake-dt*3); dashTime-=dt;
   player.dashCd-=dt;
+  // --- Wolf3D doors (WL_ACT1.C MoveDoors) ---
+  // dr_opening slides position += tics<<10; after OPENTICS it closes;
+  // a blocked doorway re-opens instead of closing on someone.
+  for(const d of doors){
+    if(d.action==='opening'){ d.position=Math.min(1,d.position+dt*2); if(d.position>=1){ d.action='open'; d.timer=0; } }
+    else if(d.action==='open'){
+      d.timer+=dt;
+      const nearP=Math.hypot(player.x-(d.x+0.5),player.y-(d.y+0.5))<1.2;
+      if(d.timer>WOLF.OPENTICS/70 && !nearP) d.action='closing';
+    }
+    else if(d.action==='closing'){
+      const nearP=Math.hypot(player.x-(d.x+0.5),player.y-(d.y+0.5))<1.0;
+      if(nearP){ d.action='opening'; }
+      else { d.position=Math.max(0,d.position-dt*2); if(d.position<=0) d.action='closed'; }
+    }
+    else if(d.action==='closed'){
+      // auto-open for the player standing at it (Wolf3D doors open
+      // on approach; locked ones need Cmd_Use + key)
+      const nearP=Math.hypot(player.x-(d.x+0.5),player.y-(d.y+0.5))<1.1;
+      if(nearP&&d.lock===0) d.action='opening';
+      if(nearP&&d.lock>0&&player.keys&(1<<(d.lock-1))) d.action='opening';
+    }
+  }
+  // --- Wolf3D PushWall (WL_ACT1.C MovePWalls) ---
+  // pwallstate advances; every step the wall moves 1 tile, 2 tiles total.
+  for(const pw of pushwalls){
+    if(!pw.moving) continue;
+    pw.timer+=dt;
+    if(pw.timer>0.75 && pw.state===0){
+      pw.state=1;
+      grid[pw.y][pw.x]=0; grid[pw.y+pw.dy][pw.x+pw.dx]=98;
+      pw.x+=pw.dx; pw.y+=pw.dy;
+      log('The pushwall slides…');
+    } else if(pw.timer>1.5 && pw.state===1){
+      pw.state=2; pw.moving=false;
+      grid[pw.y][pw.x]=0; grid[pw.y+pw.dy][pw.x+pw.dx]=98;
+      pw.x+=pw.dx; pw.y+=pw.dy;
+      player.score+=500; log('SECRET FOUND! +500 — the alcove is open');
+      sfx('level');
+    }
+  }
   if(player.regen) player.hp=Math.min(player.maxHp, player.hp+player.regen*dt);
   // mouse / touch look
   if(mouseDX){ player.ang+=mouseDX*0.0028; mouseDX=0; }
@@ -450,47 +658,146 @@ function update(dt){
   if(keys['Space']||firing) tryShoot();
   if(keys['KeyT']){ keys['KeyT']=false; throwBomb(); }
   if(keys['KeyR']){ keys['KeyR']=false; startReload(); }
-  // enemies
+  if(keys['KeyE']){ keys['KeyE']=false; cmdUse(); }
+  // --- enemies: Wolf3D state machine (WL_STATE.C) ---
+  // states: stand (T_Stand) -> path (T_Path, patrol) -> chase (T_Chase)
+  // -> shoot (T_Shoot) -> pain -> die. SightPlayer reaction delays,
+  // FirstSighting speed multipliers, CheckLine, attack chance
+  // (tics<<4)/dist, shoot hit-chance/damage tables, dog T_Bite.
   for(const e of enemies){
     if(e.dead) continue;
-    e.flash-=dt; e.fire-=dt; e.wander-=dt;
+    e.flash-=dt; e.fire-=dt; e.wander-=dt; e.stateTics-=dt*70; // tics @70Hz
     const dx=player.x-e.x, dy=player.y-e.y, d=Math.hypot(dx,dy);
-    const seen=d<9&&los(e.x,e.y,player.x,player.y);
-    if(seen){
-      e.ang=Math.atan2(dy,dx);
-      if(d>1.2){ e.x+=Math.cos(e.ang)*e.speed*dt; e.y+=Math.sin(e.ang)*e.speed*dt; }
-      if(e.fire<=0){
-        const base=ENEMY_TYPES[e.type]; e.fire=base.fire*rr(0.8,1.3);
-        if(d<base.range){ if(Math.random()<0.55) hurtPlayer(e.dmg*rr(0.8,1.2), e.type); else log(e.type.toUpperCase()+' missed'); }
+    const base=ENEMY_TYPES[e.type];
+    // SightPlayer (WL_STATE.C:1404): auto-true within MINSIGHT 1.5
+    // tiles, else enemy must face the player and have a clear line.
+    let seen=false;
+    if(d<1.5) seen=true;
+    else if(d<9){
+      const facing=Math.cos(e.ang)*dx+Math.sin(e.ang)*dy;
+      if(facing>0 && los(e.x,e.y,player.x,player.y)) seen=true;
+    }
+    if(e.state==='stand'||e.state==='path'){
+      if(seen && !e.attackMode){
+        // reaction delay, then FirstSighting
+        if(e.reaction<=0) e.reaction=base.reaction/70 + rndT()/256*0.3;
+        e.reaction-=dt;
+        if(e.reaction<=0) firstSighting(e);
+      } else if(e.state==='path'||e.wander<=0){
+        // T_Path: patrol — follow current dir, pick a new one at walls
+        e.state='path'; e.wander=rr(2,5);
+        if(rng()<0.3) e.ang=rr(0,6.28);
+        e.x+=Math.cos(e.ang)*e.patrol*dt; e.y+=Math.sin(e.ang)*e.patrol*dt;
+        if(grid[Math.floor(e.y)]&&grid[Math.floor(e.y)][Math.floor(e.x)]>0){ e.x-=Math.cos(e.ang)*e.patrol*dt; e.y-=Math.sin(e.ang)*e.patrol*dt; e.ang=rr(0,6.28); }
+        // enemies open doors while patrolling (WL_ACT1.C)
+        const gx=Math.floor(e.x+Math.cos(e.ang)*0.6), gy=Math.floor(e.y+Math.sin(e.ang)*0.6);
+        const dr=doorAt(gx,gy); if(dr&&dr.action==='closed'&&dr.lock===0) dr.action='opening';
       }
-    } else if(e.wander<=0){ e.wander=rr(2,5); e.ang=rr(0,6.28); }
-    else { e.x+=Math.cos(e.ang)*e.speed*0.3*dt; e.y+=Math.sin(e.ang)*e.speed*0.3*dt; }
-    // keep enemies out of walls
-    if(grid[Math.floor(e.y)]&&grid[Math.floor(e.y)][Math.floor(e.x)]>0){ e.x-=Math.cos(e.ang)*e.speed*dt; e.y-=Math.sin(e.ang)*e.speed*dt; }
+      continue;
+    }
+    if(e.state==='pain'){
+      if(e.stateTics<=0) e.state='chase';
+      continue;
+    }
+    // T_Chase
+    if(e.state==='chase'){
+      e.ang=Math.atan2(dy,dx);
+      // attack chance per frame: (tics<<4)/dist, 300 if adjacent
+      const chance=d<1?300:(dt*70*16)/Math.max(1,d);
+      if(seen && d<base.range && rndT()<chance){
+        e.state='shoot'; e.stateTics=base.shots?6:20; e.shotsLeft=base.shots||1; continue;
+      }
+      if(d>1.2){ e.x+=Math.cos(e.ang)*e.speed*dt; e.y+=Math.sin(e.ang)*e.speed*dt; }
+      if(grid[Math.floor(e.y)]&&grid[Math.floor(e.y)][Math.floor(e.x)]>0){ e.x-=Math.cos(e.ang)*e.speed*dt; e.y-=Math.sin(e.ang)*e.speed*dt; }
+      // chase through doors: open them (T_Chase waits on doors in Wolf3D)
+      const gx=Math.floor(e.x+Math.cos(e.ang)*0.6), gy=Math.floor(e.y+Math.sin(e.ang)*0.6);
+      const dr=doorAt(gx,gy); if(dr&&dr.action==='closed'&&dr.lock===0) dr.action='opening';
+      // Dog: T_DogChase -> bite within MINACTORDIST (WL_STATE.C T_Bite)
+      if(e.type==='dog'&&d<WOLF.MINACTORDIST+0.4&&e.fire<=0){
+        e.fire=0.9;
+        if(rndT()<180){ hurtPlayer(WOLF.shootDamage(1), 'dog bite'); log('Dog bites!'); }
+        else log('Dog snaps and misses');
+      }
+      continue;
+    }
+    if(e.state==='shoot'){
+      // T_Shoot: hit chance by distance + running/walking, damage table
+      if(e.stateTics<=0){
+        const running=keys['ShiftLeft']||keys['ShiftRight'];
+        const hc=WOLF.shootHitChance(d, running, seen);
+        if(seen && rndT()<hc){ hurtPlayer(WOLF.shootDamage(d), e.type); }
+        else if(seen) log(e.type.toUpperCase()+' missed');
+        e.shotsLeft--;
+        if(e.shotsLeft>0){ e.stateTics=10; } // SS 4 shots, mutant 2 per volley
+        else { e.state='chase'; e.fire=base.fire*rr(0.8,1.3); }
+      }
+      continue;
+    }
   }
-  // pickups
+  // pickups — Wolf3D GetBonus values (WL_AGENT.C:667)
+  // treasure: cross 100, chalice 500, bible 1000, crown 5000;
+  // first aid +25, food +10, clip +8 (cap 99), key1 = gold key.
+  // Pickups are refused at full health / full ammo, item stays.
   for(const it of items){
     if(it.taken) continue;
     const d=Math.hypot(it.x-player.x,it.y-player.y);
     if(d<0.7){
-      if(it.kind==='exit'){
-        sfx('exit'); player.score+=500*depth; player.gold+=1;
-        floorClearPending=true; offerChoices(3); state='floorclear'; log('FLOOR '+depth+' CLEAR — pick an upgrade, then descend');
-      } else if(it.kind==='health'){ player.hp=Math.min(player.maxHp,player.hp+30); it.taken=true; sfx('pickup'); log('+30 HP'); }
-      else if(it.kind==='ammo'){ for(const w of WEAPONS) if(isFinite(w.ammo)) w.ammo+=30; it.taken=true; sfx('pickup'); log('+30 ammo (all guns)'); }
-      else if(it.kind==='gold'){ player.score+=200; player.gold++; it.taken=true; sfx('pickup'); log('+$ TREASURE +200 score'); }
+      if(it.kind==='exit'){ floorComplete(); }
+      else if(it.kind==='firstaid'){ if(player.hp>=player.maxHp) continue; player.hp=Math.min(player.maxHp,player.hp+25); it.taken=true; sfx('pickup'); log('+25 HP (first aid)'); }
+      else if(it.kind==='food'){ if(player.hp>=player.maxHp) continue; player.hp=Math.min(player.maxHp,player.hp+10); it.taken=true; sfx('pickup'); log('+10 HP (food)'); }
+      else if(it.kind==='clip'){ const w=WEAPONS[player.weapon]; if(isFinite(w.ammo)&&w.ammo>=99) continue; if(isFinite(w.ammo)) w.ammo=Math.min(99,w.ammo+8); else player.mags[player.weapon]=Math.min(99,player.mags[player.weapon]+8); it.taken=true; sfx('pickup'); log('+8 ammo (clip)'); }
+      else if(it.kind==='cross'){ givePoints(100); player.gold++; it.taken=true; sfx('pickup'); log('Cross +100'); }
+      else if(it.kind==='chalice'){ givePoints(500); player.gold++; it.taken=true; sfx('pickup'); log('Chalice +500'); }
+      else if(it.kind==='bible'){ givePoints(1000); player.gold++; it.taken=true; sfx('pickup'); log('Bible +1000'); }
+      else if(it.kind==='crown'){ givePoints(5000); player.gold++; it.taken=true; sfx('pickup'); log('CROWN +5000'); }
       else if(it.kind==='bomb'){ player.bombs=Math.min(player.maxBombs,player.bombs+1); it.taken=true; sfx('pickup'); log('+1 bomb'); }
-      else if(it.kind==='key'){ player.score+=100; it.taken=true; sfx('pickup'); log('Found a brass key (+100)'); }
+      else if(it.kind==='key1'){ player.keys|=1; it.taken=true; sfx('pickup'); log('GOLD KEY — locked doors open now'); }
     }
   }
   if(levelUpPending>0 && state==='play'){ offerChoices(3); state='levelup'; }
 }
+function solidAt(x,y){
+  // Wolf3D ClipMove (WL_AGENT.C): try full move, then X-only, then Y-only.
+  // Doors count as solid until open; everything else is grid>0.
+  const gx=Math.floor(x), gy=Math.floor(y);
+  if(gx<0||gy<0||gx>=mapW||gy>=mapH) return true;
+  const t=grid[gy][gx];
+  if(t===90) return !isDoorOpen(gx,gy);
+  return t>0;
+}
 function movePlayer(vx,vy){
-  const r=0.22;
+  const r=WOLF.PLAYERSIZE;
   let nx=player.x+vx;
-  if(!(grid[Math.floor(player.y)][Math.floor(nx+Math.sign(vx)*r)]>0)) player.x=nx;
+  if(!solidAt(nx+Math.sign(vx)*r, player.y)) player.x=nx;
   let ny=player.y+vy;
-  if(!(grid[Math.floor(ny+Math.sign(vy)*r)][Math.floor(player.x)]>0)) player.y=ny;
+  if(!solidAt(player.x, ny+Math.sign(vy)*r)) player.y=ny;
+}
+// --- Wolf3D Cmd_Use (WL_AGENT.C:1003): E faces a tile 1 ahead ---
+// pushwall -> PushWall, elevator -> descend, locked door -> key check.
+function cmdUse(){
+  if(state!=='play') return;
+  const dx=Math.cos(player.ang), dy=Math.sin(player.ang);
+  const tx=Math.floor(player.x+dx*1.2), ty=Math.floor(player.y+dy*1.2);
+  if(tx<0||ty<0||tx>=mapW||ty>=mapH) return;
+  const t=grid[ty][tx];
+  if(t===98){ // PUSHABLETILE
+    const pw=pushwalls.find(w=>w.x===tx&&w.y===ty);
+    if(pw&&!pw.moving){ pw.moving=true; pw.timer=0; log('Pushwall… something moves in the wall.'); sfx('pickup'); }
+    return;
+  }
+  if(t===90){
+    const d=doorAt(tx,ty);
+    if(d&&d.lock>0&&!(player.keys&(1<<(d.lock-1)))){ log('LOCKED — needs the gold key.'); beep(120,0.15,'square',0.06); return; }
+    if(d&&d.action==='closed'){ d.action='opening'; log('Door opens.'); }
+    return;
+  }
+  // elevator: exit item within 1.2 tiles
+  for(const it of items) if(!it.taken&&it.kind==='exit'&&Math.hypot(it.x-player.x,it.y-player.y)<1.4){ floorComplete(); return; }
+}
+function floorComplete(){
+  if(state!=='play') return;
+  sfx('exit'); player.score+=500*depth; player.gold+=1;
+  floorClearPending=true; offerChoices(3); state='floorclear'; log('FLOOR '+depth+' CLEAR — elevator. Pick an upgrade, then descend');
 }
 // --- rendering: dense ASCII buffer ---
 let buf=[], col=[];
@@ -533,7 +840,7 @@ function render(){
   }
   // sprites: items + enemies, far to near, with z-buffer
   const sprs=[];
-  for(const it of items) if(!it.taken) sprs.push({x:it.x,y:it.y,art:SPRITES[it.kind],color:it.kind==='exit'?'#7ee081':it.kind==='health'?'#ff7070':it.kind==='gold'?'#ffd75e':'#c0c0c0',scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
+  for(const it of items) if(!it.taken&&SPRITES[it.kind]) sprs.push({x:it.x,y:it.y,art:SPRITES[it.kind],color:it.kind==='exit'?'#7ee081':(it.kind==='firstaid'||it.kind==='food')?'#ff7070':(it.kind==='cross'||it.kind==='chalice'||it.kind==='bible'||it.kind==='crown'||it.kind==='key1')?'#ffd75e':'#c0c0c0',scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
   for(const e of enemies) if(!e.dead){ const b=ENEMY_TYPES[e.type]; sprs.push({x:e.x,y:e.y,art:SPRITES[b.spr],color:e.flash>0?'#ffffff':b.color,scale:e.type==='boss'?1.6:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e)}); }
   sprs.sort((a,b)=>b.dist-a.dist);
   for(const s of sprs){
@@ -561,21 +868,23 @@ function render(){
       for(let i=0;i<bw;i++) put(bx+i,by, i/bw<s.hp?'#':'-','#ff6060');
     }
   }
-  // weapon (bottom centre) + muzzle flash
+  // weapon (bottom centre, drawn 2x so it stays chunky at 180 cols) + muzzle flash
   const wArt=WEAPON_ART[player.weapon];
-  const wx=Math.floor(COLS/2)-4, wy=ROWS-wArt.length-1;
-  for(let y=0;y<wArt.length;y++) for(let x=0;x<wArt[y].length;x++){ const ch=wArt[y][x]; if(ch!==' ') put(wx+x,wy+y,ch, flash>0?'#ffd75e':'#c8c8c8'); }
-  if(flash>0){ put(Math.floor(COLS/2), wy-1, '*', '#ffffff'); put(Math.floor(COLS/2)+1, wy-1, '*', '#ffd75e'); put(Math.floor(COLS/2), wy-2, '*', '#ffd75e'); }
+  const wx=Math.floor(COLS/2)-8, wy=ROWS-wArt.length*2-1;
+  for(let y=0;y<wArt.length;y++) for(let x=0;x<wArt[y].length;x++){ const ch=wArt[y][x]; if(ch!==' ') { put(wx+x*2,wy+y*2,ch, flash>0?'#ffd75e':'#c8c8c8'); put(wx+x*2+1,wy+y*2,ch, flash>0?'#ffd75e':'#c8c8c8'); put(wx+x*2,wy+y*2+1,ch, flash>0?'#ffd75e':'#c8c8c8'); put(wx+x*2+1,wy+y*2+1,ch, flash>0?'#ffd75e':'#c8c8c8'); } }
+  if(flash>0){ put(Math.floor(COLS/2), wy-1, '*', '#ffffff'); put(Math.floor(COLS/2)+1, wy-1, '*', '#ffd75e'); put(Math.floor(COLS/2), wy-2, '*', '#ffd75e'); put(Math.floor(COLS/2)-1, wy-1, '*', '#ffd75e'); }
   // HUD
   drawText(0,0,'QWERTYSTEIN  FLOOR '+depth+' '+theme.name+'  SEED '+runSeed, '#ffd75e');
   drawText(0,1,'HP '+Math.ceil(player.hp)+'/'+player.maxHp+'  ARM '+Math.floor(player.armor)+'  '+WEAPONS[player.weapon].name+' '+player.mags[player.weapon]+'/'+(isFinite(WEAPONS[player.weapon].ammo)?WEAPONS[player.weapon].ammo:'--')+'  BOMBS '+player.bombs+'  DASH '+(player.dashCd<=0?'READY':Math.ceil(player.dashCd)+'s'), '#7ee081');
-  drawText(0,2,'LV '+player.level+'  XP '+Math.floor(player.xp)+'/'+player.xpNext+'  SCORE '+player.score+'  KILLS '+player.kills+'  GOLD '+player.gold+'  '+(reloadT>0?'RELOADING...':''), '#c0c0c0');
+  drawText(0,2,'LV '+player.level+'  XP '+Math.floor(player.xp)+'/'+player.xpNext+'  SCORE '+player.score+'  KILLS '+player.kills+'  GOLD '+player.gold+'  KEYS '+(player.keys&1?'GOLD':'-')+'  LIVES '+player.extraLives+'  '+(reloadT>0?'RELOADING...':''), '#c0c0c0');
+  // Wolf3D elevator prompt: press E at the exit tile
+  for(const it of items) if(!it.taken&&it.kind==='exit'&&Math.hypot(it.x-player.x,it.y-player.y)<2.5) drawText(Math.floor(COLS/2)-14, ROWS-14, 'ELEVATOR — press E to descend', '#7ee081');
   if(padName) drawText(COLS-28,0,'PAD: '+padName.slice(0,22), '#7ee081');
   // XP bar
   const xpW=Math.floor(COLS*0.3), xpF=Math.floor(xpW*player.xp/player.xpNext);
   for(let i=0;i<xpW;i++) put(i,3, i<xpF?'=':'-', '#7ee081');
   // minimap top-right
-  const mw=18, mh=18, ox=COLS-mw-1, oy=5;
+  const mw=28, mh=28, ox=COLS-mw-1, oy=5;
   for(let my=0;my<mh;my++) for(let mx=0;mx<mw;mx++){
     const gx=Math.floor(mx/mw*mapW), gy=Math.floor(my/mh*mapH);
     put(ox+mx,oy+my, grid[gy][gx]>0?'#':'.', grid[gy][gx]>0?'#555':'#222');
@@ -584,18 +893,25 @@ function render(){
   for(const e of enemies) if(!e.dead) put(ox+Math.floor(e.x/mapW*mw), oy+Math.floor(e.y/mapH*mh), 'x', '#ff6060');
   for(const it of items) if(!it.taken&&it.kind==='exit') put(ox+Math.floor(it.x/mapW*mw), oy+Math.floor(it.y/mapH*mh), 'E', '#7ee081');
   // logs bottom-left above weapon
-  logs.forEach((m,i)=>drawText(0, ROWS-6+i, m.slice(0,60), '#888888'));
+  logs.forEach((m,i)=>drawText(0, ROWS-6+i, m.slice(0,90), '#888888'));
   // overlays
   if(state==='title') overlayTitle();
   if(state==='levelup'||state==='floorclear') overlayChoices();
   if(state==='dead') overlayDead();
   if(state==='paused') overlayText('PAUSED — press P to resume', '#ffd75e');
-  // blit buffer to canvas
+  // blit buffer to canvas, run-length: one fillText per run of same colour.
+  // At 180x75 (13,500 cells) per-cell drawing would be ~13k text calls/frame;
+  // runs collapse floor/ceiling/wall spans to a few hundred calls instead.
   ctx.fillStyle='#000'; ctx.fillRect(0,0,cv.width,cv.height);
   const ox2=shake>0?rr(-shake,shake)*2:0, oy2=shake>0?rr(-shake,shake)*2:0;
-  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
-    ctx.fillStyle=col[y][x];
-    ctx.fillText(buf[y][x], x*CW+ox2, y*CH+oy2);
+  for(let y=0;y<ROWS;y++){
+    let runCol=col[y][0], runStr=buf[y][0], runX=0;
+    for(let x=1;x<=COLS;x++){
+      if(x===COLS||col[y][x]!==runCol){
+        if(runStr.trim()){ ctx.fillStyle=runCol; ctx.fillText(runStr, runX*CW+ox2, y*CH+oy2); }
+        if(x<COLS){ runCol=col[y][x]; runStr=buf[y][x]; runX=x; }
+      } else runStr+=buf[y][x];
+    }
   }
 }
 function maxHpSafe(e){ return e.maxHp||1; }
@@ -615,6 +931,7 @@ function overlayTitle(){
     '',
     'WASD move — mouse look — click / Space shoot — 1-5 weapons',
     'Q dash — T bomb — R reload — Shift run — P pause',
+    'E use: doors, pushwalls, elevator — Wolf3D rules',
     'Find the [EXIT] portal. Kill. Level up. Pick upgrades. Go deeper.',
     '',
     'BEST: floor '+best().depth+'  score '+best().score+'  kills '+best().kills,
