@@ -6,13 +6,26 @@ Play it live: https://bthompson91.github.io/qwertystein/
 
 ## How to play
 
-Open `index.html` in a browser, click, press Enter.
+Open `index.html` in a browser, click, press Enter. Or play live at https://bthompson91.github.io/qwertystein/
 
 - **WASD** move, **mouse** look (click to lock), **← →** turn
 - **Click / Space** shoot
 - **1–5** weapons: Knife, Pistol, SMG, Shotgun, Chaingun
 - **R** reload, **Shift** run, **Q** dash, **T** throw a bomb
 - **P** pause, **M** mute, **N** new run (on death)
+
+### Phone
+
+On a touchscreen you get on-screen controls: a **MOVE** virtual stick (left pad), a **LOOK** pad (drag to turn, tap to fire), and FIRE / DASH / BOMB / WEAPON / RELOAD / PAUSE buttons. You can also touch the game itself: drag the left half to move, drag the right half to look, tap the right half to fire.
+
+### Joypad
+
+Yes — any standard gamepad works via the browser Gamepad API, no install needed. Plug in an Xbox, PlayStation, Switch Pro or 8BitDo pad (USB or Bluetooth) and press a button; the game shows its name in the HUD.
+
+- Left stick: move · Right stick: look
+- **RT or A**: fire (hold) · **X**: reload · **B**: dash · **Y**: bomb
+- **LB / RB**: change weapon · **Start**: pause · **Back/Select**: mute
+- Upgrade screens: **LB / RB** to pick, **A** to confirm · Title / death screens: **A** to start a new run
 
 ## Procedural levels
 

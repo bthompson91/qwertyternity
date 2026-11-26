@@ -13,8 +13,14 @@
   #game{display:block;width:100%;height:auto;background:#000;border:2px solid #444;cursor:crosshair;image-rendering:pixelated}
   #keys{font-size:12px;color:#aaa;line-height:1.7;margin-top:8px;white-space:pre-wrap}
   #keys b{color:#ffd75e}
-  #touch{display:none;gap:8px;margin-top:8px;flex-wrap:wrap}
+  #touch{display:none;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:stretch}
   #touch button{background:#222;color:#eee;border:1px solid #555;padding:12px 16px;font:inherit;font-size:16px}
+  #touch button.big{background:#5a2a2a;border-color:#a05050;padding:12px 24px}
+  #touch button:active{background:#555}
+  .pad{position:relative;width:132px;height:132px;background:#111;border:1px solid #555;border-radius:8px;touch-action:none;flex:none}
+  .pad .nub{position:absolute;left:46px;top:46px;width:40px;height:40px;background:#444;border:1px solid #888;border-radius:50%}
+  .pad .lbl{position:absolute;left:0;right:0;top:4px;text-align:center;color:#666;font-size:11px}
+  #padstat{color:#7ee081;font-size:12px;margin-top:6px;min-height:14px}
   @media (pointer:coarse){#touch{display:flex}}
 </style>
 </head>
@@ -24,15 +30,20 @@
 <p class="sub">Procedurally generated castle. Every run is a new seed. Die, and the run is gone. Clear a floor, pick an upgrade, go deeper.</p>
 <canvas id="game" width="1040" height="588"></canvas>
 <div id="touch">
-  <button data-k="KeyW">▲</button><button data-k="KeyA">◀</button><button data-k="KeyS">▼</button><button data-k="KeyD">▶</button>
-  <button data-k="ArrowLeft">⟲</button><button data-k="ArrowRight">⟳</button>
-  <button data-k="Space">FIRE</button><button data-k="KeyQ">DASH</button><button data-k="KeyT">BOMB</button>
+  <div class="pad" id="stick"><span class="lbl">MOVE</span><div class="nub" id="stickNub"></div></div>
+  <div class="pad" id="lookpad"><span class="lbl">LOOK — drag, tap = fire</span><div class="nub" id="lookNub"></div></div>
+  <button class="big" data-k="Space">FIRE</button>
+  <button data-k="KeyQ">DASH</button><button data-k="KeyT">BOMB</button>
+  <button data-act="weapon">WEAPON</button><button data-act="reload">RELOAD</button><button data-act="pause">PAUSE</button>
 </div>
+<div id="padstat"></div>
 <pre id="keys"><b>WASD</b> move &nbsp; <b>Mouse</b> look (click to lock) &nbsp; <b>← →</b> turn &nbsp; <b>Click / Space</b> shoot
 <b>1-5</b> weapons: 1 Knife  2 Pistol  3 SMG  4 Shotgun  5 Chaingun &nbsp; <b>R</b> reload &nbsp; <b>Shift</b> run
 <b>Q</b> dash &nbsp; <b>T</b> throw bomb &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>N</b> new run (on death)
 <b>QWERTY tip:</b> strafe with <b>Q/E</b>? No — Q is dash, E is nothing. Strafe is A/D while turning with the mouse. That's the QWERTYSTEIN way.
-Find the glowing <b>[EXIT]</b> portal on each floor. Kills give XP. Level up: press <b>1 / 2 / 3</b> to pick an upgrade.</pre>
+Find the glowing <b>[EXIT]</b> portal on each floor. Kills give XP. Level up: press <b>1 / 2 / 3</b> to pick an upgrade.
+<b>Phone:</b> left pad = move stick, right pad = drag to look (tap it to fire), FIRE / DASH / BOMB buttons below. Also works by touch on the game itself: left half drag = move, right half drag = look, tap right = fire.
+<b>Joypad:</b> plug in any standard gamepad (Xbox / PlayStation / Switch Pro / 8BitDo) and press a button — left stick moves, right stick looks, RT or A fires, X reloads, B dashes, Y bombs, LB/RB change weapon, Start pauses. On upgrade screens LB/RB pick, A confirms.</pre>
 </div>
 <script>
 'use strict';
@@ -190,6 +201,17 @@ let state='title'; // title | play | levelup | floorclear | dead | paused
 let player, grid, mapW, mapH, enemies, items, depth, runSeed, theme, logs=[];
 let levelChoices=[], levelUpPending=0, floorClearPending=false;
 let keys={}, mouseDX=0, firing=false, lastTime=0, flash=0, shake=0, dashTime=0;
+// touch: virtual stick (move) + look drag. stickVec is -1..1, lookDX accumulates px.
+let stickVec={x:0,y:0}, lookDX=0, choiceSel=0;
+// gamepad: standard mapping, polled every frame. Any standard pad works.
+let padName='', padPrev=[];
+function chooseUpgrade(i){
+  const u=levelChoices[i]; if(!u) return;
+  applyUpgrade(u); levelUpPending=Math.max(0,levelUpPending-1);
+  if(state==='floorclear'){ genLevel(depth+1); state='play'; }
+  else if(levelUpPending>0){ offerChoices(3); choiceSel=0; }
+  else state='play';
+}
 let zbuf=new Float32Array(COLS);
 function log(m){ logs.unshift(m); logs=logs.slice(0,4); }
 function newRun(){
@@ -255,7 +277,7 @@ function genLevel(d){
   log('FLOOR '+d+' — '+theme.name+' — '+rooms.length+' rooms, '+enemies.length+' hostiles. Seed '+(runSeed+d*7919));
 }
 function offerChoices(n){
-  levelChoices=shuffle(UPGRADES.slice()).slice(0,n);
+  levelChoices=shuffle(UPGRADES.slice()).slice(0,n); choiceSel=0;
 }
 function gainXp(n){
   player.xp+=n*player.xpMul;
@@ -361,19 +383,65 @@ function saveBest(){
 function best(){
   try{ return JSON.parse(localStorage.getItem('qwertystein-best')||'{"depth":0,"score":0,"kills":0}'); }catch(e){ return {depth:0,score:0,kills:0}; }
 }
+// --- gamepad (Gamepad API, standard mapping) ---
+let padMove={x:0,y:0};
+function dz(v){ return Math.abs(v)<0.18?0:v; }
+function getPad(){ try{ const ps=navigator.getGamepads?navigator.getGamepads():[]; for(const p of ps) if(p&&p.connected) return p; }catch(e){} return null; }
+function pollPad(dt){
+  const p=getPad(); padMove={x:0,y:0};
+  if(!p) return;
+  padMove.x=dz(p.axes[0]||0); padMove.y=dz(p.axes[1]||0);
+  player.ang+=dz(p.axes[2]||0)*dt*3.2; // right stick look
+  const b=i=>!!(p.buttons[i]&&p.buttons[i].pressed);
+  const edge=i=>b(i)&&!padPrev[i];
+  if(b(7)||b(0)) tryShoot(); // RT or A = fire (hold)
+  if(edge(2)) startReload(); // X = reload
+  if(edge(1)&&player.dashCd<=0){ player.dashCd=player.dashCdMax; dashTime=0.22; } // B = dash
+  if(edge(3)) throwBomb(); // Y = bomb
+  if(edge(4)) cycleWeapon(-1); // LB
+  if(edge(5)) cycleWeapon(1); // RB
+  if(edge(9)){ state=state==='play'?'paused':'play'; } // Start = pause
+  if(edge(8)){ muted=!muted; log(muted?'Muted':'Sound on'); } // Back/Select = mute
+  padPrev=p.buttons.map(x=>x.pressed);
+}
+function pollPadMenus(){
+  const p=getPad(); if(!p) return;
+  const b=i=>!!(p.buttons[i]&&p.buttons[i].pressed);
+  const edge=i=>b(i)&&!padPrev[i];
+  if(state==='title'&&edge(0)){ newRun(); }
+  else if(state==='dead'&&edge(0)){ newRun(); }
+  else if((state==='levelup'||state==='floorclear')){
+    if(edge(4)) choiceSel=(choiceSel+levelChoices.length-1)%levelChoices.length;
+    if(edge(5)) choiceSel=(choiceSel+1)%levelChoices.length;
+    if(edge(0)) chooseUpgrade(choiceSel);
+  }
+  else if(state==='paused'&&edge(9)){ state='play'; }
+  padPrev=p.buttons.map(x=>x.pressed);
+}
+function cycleWeapon(d){
+  if(state!=='play') return;
+  player.weapon=(player.weapon+d+WEAPONS.length)%WEAPONS.length;
+  reloadT=0; reloading=false; log('Weapon: '+WEAPONS[player.weapon].name);
+}
+window.addEventListener('gamepadconnected', e=>{ padName=e.gamepad.id||'gamepad'; padPrev=[]; log('JOYPAD: '+padName.slice(0,28)); const el=document.getElementById('padstat'); if(el) el.textContent='Joypad connected: '+padName.slice(0,60)+' — left stick move, right stick look, RT fire'; });
+window.addEventListener('gamepaddisconnected', ()=>{ padName=''; const el=document.getElementById('padstat'); if(el) el.textContent=''; log('Joypad disconnected'); });
 // --- update ---
 function update(dt){
   if(state!=='play') return;
   shootCd-=dt; if(reloadT>0){ reloadT-=dt; if(reloadT<=0) completeReload(); } flash-=dt; shake=Math.max(0,shake-dt*3); dashTime-=dt;
   player.dashCd-=dt;
   if(player.regen) player.hp=Math.min(player.maxHp, player.hp+player.regen*dt);
-  // mouse look
+  // mouse / touch look
   if(mouseDX){ player.ang+=mouseDX*0.0028; mouseDX=0; }
+  if(lookDX){ player.ang+=lookDX*0.005; lookDX=0; }
   const turn=(keys['ArrowLeft']?1:0)-(keys['ArrowRight']?1:0);
   player.ang+=turn*dt*2.6;
-  // movement: WASD, Shift run, Q dash
+  pollPad(dt);
+  // movement: WASD, Shift run, Q dash — plus touch stick + gamepad left stick
   let mx=0,my=0;
   if(keys['KeyW'])my+=1; if(keys['KeyS'])my-=1; if(keys['KeyA'])mx-=1; if(keys['KeyD'])mx+=1;
+  mx+=stickVec.x+padMove.x; my+=-stickVec.y-padMove.y;
+  if(mx>1)mx=1; if(mx<-1)mx=-1; if(my>1)my=1; if(my<-1)my=-1;
   if(keys['KeyQ']&&player.dashCd<=0){ player.dashCd=player.dashCdMax; dashTime=0.22; beep(500,0.1,'sine',0.05); }
   let sp=3.4*player.speedMul*(keys['ShiftLeft']||keys['ShiftRight']?1.5:1)*(dashTime>0?2.6:1);
   const ca=Math.cos(player.ang), sa=Math.sin(player.ang);
@@ -502,6 +570,7 @@ function render(){
   drawText(0,0,'QWERTYSTEIN  FLOOR '+depth+' '+theme.name+'  SEED '+runSeed, '#ffd75e');
   drawText(0,1,'HP '+Math.ceil(player.hp)+'/'+player.maxHp+'  ARM '+Math.floor(player.armor)+'  '+WEAPONS[player.weapon].name+' '+player.mags[player.weapon]+'/'+(isFinite(WEAPONS[player.weapon].ammo)?WEAPONS[player.weapon].ammo:'--')+'  BOMBS '+player.bombs+'  DASH '+(player.dashCd<=0?'READY':Math.ceil(player.dashCd)+'s'), '#7ee081');
   drawText(0,2,'LV '+player.level+'  XP '+Math.floor(player.xp)+'/'+player.xpNext+'  SCORE '+player.score+'  KILLS '+player.kills+'  GOLD '+player.gold+'  '+(reloadT>0?'RELOADING...':''), '#c0c0c0');
+  if(padName) drawText(COLS-28,0,'PAD: '+padName.slice(0,22), '#7ee081');
   // XP bar
   const xpW=Math.floor(COLS*0.3), xpF=Math.floor(xpW*player.xp/player.xpNext);
   for(let i=0;i<xpW;i++) put(i,3, i<xpF?'=':'-', '#7ee081');
@@ -560,10 +629,11 @@ function overlayChoices(){
   const title=state==='floorclear'?'FLOOR '+depth+' CLEAR — CHOOSE AN UPGRADE, THEN DESCEND':'LEVEL UP — CHOOSE AN UPGRADE';
   drawText(Math.floor((COLS-title.length)/2), 8, title, '#ffd75e');
   levelChoices.forEach((u,i)=>{
-    const s='['+(i+1)+'] '+u.name+' — '+u.desc;
-    drawText(Math.floor((COLS-s.length)/2), 11+i*2, s, '#7ee081');
+    const s=(i===choiceSel?'> ':'  ')+'['+(i+1)+'] '+u.name+' — '+u.desc;
+    drawText(Math.floor((COLS-s.length)/2), 11+i*2, s, i===choiceSel?'#ffd75e':'#7ee081');
   });
   drawText(Math.floor((COLS-28)/2), 18, 'Press 1, 2 or 3 to choose', '#c0c0c0');
+  if(padName) drawText(0, ROWS-1, 'JOYPAD: '+padName.slice(0,30)+' — LB/RB pick, A confirm', '#7ee081');
 }
 function overlayDead(){
   const b=best();
@@ -588,13 +658,7 @@ document.addEventListener('keydown', e=>{
   if(e.code==='KeyP'&&state==='paused'){ state='play'; return; }
   if(e.code==='KeyM'){ muted=!muted; log(muted?'Muted':'Sound on'); return; }
   if((state==='levelup'||state==='floorclear')&&['Digit1','Digit2','Digit3'].includes(e.code)){
-    const i=+e.code.slice(-1)-1, u=levelChoices[i];
-    if(u){ applyUpgrade(u); levelUpPending=Math.max(0,levelUpPending-1);
-      if(state==='floorclear'){ genLevel(depth+1); state='play'; }
-      else if(levelUpPending>0){ offerChoices(3); }
-      else state='play';
-    }
-    return;
+    chooseUpgrade(+e.code.slice(-1)-1); return;
   }
   if(state==='play'&&['Digit1','Digit2','Digit3','Digit4','Digit5'].includes(e.code)){
     const w=+e.code.slice(-1)-1;
@@ -615,14 +679,68 @@ document.addEventListener('mouseup', ()=>{ firing=false; });
 document.addEventListener('pointerlockchange', ()=>{ if(document.pointerLockElement!==cv) mouseDX=0; });
 // touch buttons
 document.querySelectorAll('#touch button').forEach(b=>{
-  const k=b.dataset.k;
-  b.addEventListener('pointerdown', e=>{ e.preventDefault(); keys[k]=true; if(k==='Space') tryShoot(); });
-  b.addEventListener('pointerup', ()=>{ keys[k]=false; });
-  b.addEventListener('pointerleave', ()=>{ keys[k]=false; });
+  const k=b.dataset.k, act=b.dataset.act;
+  b.addEventListener('pointerdown', e=>{ e.preventDefault();
+    if(act==='weapon'){ cycleWeapon(1); return; }
+    if(act==='reload'){ startReload(); return; }
+    if(act==='pause'){ state=state==='play'?'paused':state==='paused'?'play':state; return; }
+    if(k){ keys[k]=true; if(k==='Space') tryShoot(); }
+  });
+  b.addEventListener('pointerup', ()=>{ if(k) keys[k]=false; });
+  b.addEventListener('pointerleave', ()=>{ if(k) keys[k]=false; });
 });
+// --- phone controls: virtual stick + look pad, and touch on the canvas itself ---
+function bindPad(el, nub, fn){
+  let id=null;
+  function setFrom(t){
+    const r=el.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+    let dx=(t.clientX-cx)/(r.width/2), dy=(t.clientY-cy)/(r.height/2);
+    const m=Math.hypot(dx,dy); if(m>1){ dx/=m; dy/=m; }
+    nub.style.left=(46+dx*38)+'px'; nub.style.top=(46+dy*38)+'px';
+    fn(dx,dy);
+  }
+  el.addEventListener('touchstart', e=>{ e.preventDefault(); const t=e.changedTouches[0]; id=t.identifier; setFrom(t); }, {passive:false});
+  el.addEventListener('touchmove', e=>{ e.preventDefault(); for(const t of e.changedTouches) if(t.identifier===id) setFrom(t); }, {passive:false});
+  const end=e=>{ for(const t of e.changedTouches) if(t.identifier===id){ id=null; nub.style.left='46px'; nub.style.top='46px'; fn(0,0); } };
+  el.addEventListener('touchend', end); el.addEventListener('touchcancel', end);
+}
+const stickEl=document.getElementById('stick'), lookEl=document.getElementById('lookpad');
+if(stickEl) bindPad(stickEl, document.getElementById('stickNub'), (dx,dy)=>{ stickVec={x:dx,y:dy}; });
+if(lookEl){
+  let lx=0, ly=0, lt=0;
+  lookEl.addEventListener('touchstart', e=>{ const t=e.changedTouches[0]; lx=t.clientX; ly=t.clientY; lt=Date.now(); }, {passive:true});
+  lookEl.addEventListener('touchmove', e=>{ const t=e.changedTouches[0]; lookDX+=t.clientX-lx; lx=t.clientX; ly=t.clientY; }, {passive:true});
+  lookEl.addEventListener('touchend', e=>{ if(Date.now()-lt<220) tryShoot(); });
+}
+// touch directly on the canvas: left half = move stick, right half = look / tap to fire
+let touchMoveId=null, touchMoveOX=0, touchMoveOY=0, touchLookId=null, touchLookX=0, touchLookT=0;
+cv.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  if(state==='title'){ newRun(); return; }
+  for(const t of e.changedTouches){
+    const r=cv.getBoundingClientRect(), x=t.clientX-r.left;
+    if(x<r.width/2&&touchMoveId===null){ touchMoveId=t.identifier; touchMoveOX=t.clientX; touchMoveOY=t.clientY; }
+    else if(touchLookId===null){ touchLookId=t.identifier; touchLookX=t.clientX; touchLookT=Date.now(); }
+  }
+}, {passive:false});
+cv.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    if(t.identifier===touchMoveId){ let dx=(t.clientX-touchMoveOX)/60, dy=(t.clientY-touchMoveOY)/60; const m=Math.hypot(dx,dy); if(m>1){dx/=m;dy/=m;} stickVec={x:dx,y:dy}; }
+    if(t.identifier===touchLookId){ lookDX+=t.clientX-touchLookX; touchLookX=t.clientX; }
+  }
+}, {passive:false});
+const touchEnd=e=>{
+  for(const t of e.changedTouches){
+    if(t.identifier===touchMoveId){ touchMoveId=null; stickVec={x:0,y:0}; }
+    if(t.identifier===touchLookId){ touchLookId=null; if(Date.now()-touchLookT<220&&state==='play') tryShoot(); }
+  }
+};
+cv.addEventListener('touchend', touchEnd); cv.addEventListener('touchcancel', touchEnd);
 // --- main loop ---
 function loop(t){
   const dt=Math.min(0.05,(t-lastTime)/1000||0.016); lastTime=t;
+  if(state!=='play') pollPadMenus();
   if(state==='play') update(dt);
   else if(state==='title'&&!player){ // idle title backdrop: fake a level behind the title
     if(!grid){ runSeed=42; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,mags:[Infinity,12,32,6,60],kills:0,score:0,gold:0,dead:false}; genLevel(1); player.ang+=dt*0.1; }
