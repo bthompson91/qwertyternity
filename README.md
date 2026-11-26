@@ -138,3 +138,42 @@ Deliberate differences from Doom: no rocket self-damage (close
 rockets don't hurt you); SSG rate is 1.0s not Doom's ~1.5s pump
 cycle; rocket blast radius is 2 tiles not Doom's 1; each BFG tracer
 hits an enemy once (in Doom all 40 can pile onto one target).
+
+## MIDI music and sound effects
+
+Three original compositions, embedded as base64 Standard MIDI Files
+and played by a tiny SMF parser + Web Audio General-MIDI-ish synth
+written for the game — no audio files, no libraries, no network.
+- **Title** — 80 BPM, A minor, string pads + piano arpeggio.
+- **Combat** — 150 BPM, D minor, overdriven-guitar riff, synth bass,
+  kick/snare/hats. Plays on normal floors.
+- **Boss** — 170 BPM, E minor, faster riff, syncopated kick. Plays on
+  every 3rd floor (boss floors).
+Music starts on the first key/click (browsers need a gesture for
+audio), switches per floor, and stops on death. M mutes everything.
+
+Sound effects are MIDI note sequences through the same synth:
+shoot, shotgun, hit, hurt, pickup, level-up fanfare, death descent,
+exit fanfare, glory-kill power chord, meat-hook riff, explosion.
+The old `beep()` calls still work — frequency is converted to the
+nearest MIDI note. Known limit: browsers throttle timers in a hidden
+tab, so music can stutter if you switch away mid-run.
+
+## Fullscreen + Doom/Wolf HUD
+
+- **Fullscreen:** a ⛶ FULLSCREEN button under the game (or
+  double-click the game, or F11) — when the browser is fullscreen the
+  canvas resizes to fill the screen, keeping the game's 1080x600
+  aspect (letterboxed) and scaling the character cells with it
+  (up to 2x device pixel ratio for sharpness). Leaving fullscreen
+  restores the in-page 1080x600 canvas. The page chrome (title, help
+  text) hides in fullscreen; touch controls overlay the bottom.
+- **Bottom HUD:** the 3D view now occupies the top 65 rows and the
+  bottom 10 rows are a Doom/Wolf3D-style status bar — Doom's face in
+  the middle (🙂 healthy, 😐 hurt, 😟 low, 😵 critical, 😬 just hit,
+  😈 glory kill, 💀 dead), HEALTH and ARMOR with chunky two-row
+  numerals and bars on the left, weapon + ammo in the middle-left,
+  SCORE / KILLS / GOLD / FLOOR / level / lives / glory kills / keys /
+  ammo totals on the right, the current song (♪ COMBAT / BOSS /
+  TITLE) or MUTED, and an XP bar along the very bottom edge. The old
+  top-of-screen HUD text is gone.

@@ -21,6 +21,14 @@
   .pad .nub{position:absolute;left:46px;top:46px;width:40px;height:40px;background:#444;border:1px solid #888;border-radius:50%}
   .pad .lbl{position:absolute;left:0;right:0;top:4px;text-align:center;color:#666;font-size:11px}
   #padstat{color:#7ee081;font-size:12px;margin-top:6px;min-height:14px}
+  #fsbtn{background:#222;color:#eee;border:1px solid #555;padding:8px 14px;font:inherit;font-size:14px;margin-top:8px;cursor:pointer}
+  #fsbtn:active{background:#555}
+  /* fullscreen: hide the page chrome, game fills the screen */
+  body.fs{overflow:hidden;background:#000}
+  body.fs #wrap{max-width:none;margin:0;padding:0}
+  body.fs h1,body.fs p.sub,body.fs #keys,body.fs #padstat,body.fs #fsbtn{display:none}
+  body.fs #game{border:none;margin:0 auto}
+  body.fs #touch{position:fixed;left:0;right:0;bottom:0;z-index:5;background:rgba(0,0,0,0.55);padding:6px;margin:0}
   @media (pointer:coarse){#touch{display:flex}}
 </style>
 </head>
@@ -29,6 +37,7 @@
 <h1>QWERTY<span>STEIN</span> — dense ASCII raycaster</h1>
 <p class="sub">Procedurally generated castle. Every run is a new seed. Die, and the run is gone. Clear a floor, pick an upgrade, go deeper. 🧱 brick 🪨 stone 🪵 wood 🔩 metal — Doom movement: momentum, friction, and view bob.</p>
 <canvas id="game" width="1080" height="600"></canvas>
+<button id="fsbtn">⛶ FULLSCREEN</button>
 <div id="touch">
   <div class="pad" id="stick"><span class="lbl">MOVE</span><div class="nub" id="stickNub"></div></div>
   <div class="pad" id="lookpad"><span class="lbl">LOOK — drag, tap = fire</span><div class="nub" id="lookNub"></div></div>
@@ -104,7 +113,33 @@ const WOLF={
   shootHitChance(dist, running, visible){ let c; if(running) c=visible?160-dist*16:160-dist*8; else c=visible?256-dist*16:256-dist*8; return Math.max(0,Math.min(255,c)); },
   shootDamage(dist){ const r=rndT(); if(dist<2) return r>>2; if(dist<4) return r>>3; return r>>4; },
 };
-const COLS=180, ROWS=75, CW=6, CH=8; // 13,500 cells — 3.09x the old 104x42 (4,368)
+const COLS=180, ROWS=75; // 13,500 cells — 3.09x the old 104x42 (4,368)
+const HUD_H=10, VIEW_ROWS=ROWS-HUD_H; // bottom 10 rows are the Doom-style status bar
+let CW=6, CH=8; // cell size in canvas pixels — rescaled by resizeCanvas()
+// Fullscreen: when the browser goes fullscreen (F11 or the button),
+// the canvas resizes to fill the screen, keeping the game's 1080x600
+// aspect (letterboxed) and scaling the character cells with it.
+// In normal browsing the canvas stays 1080x600 in the page.
+function resizeCanvas(){
+  if(document.fullscreenElement){
+    const dpr=Math.min(2,window.devicePixelRatio||1);
+    const sc=Math.min(window.innerWidth/1080, window.innerHeight/600);
+    cv.width=Math.round(1080*sc*dpr); cv.height=Math.round(600*sc*dpr);
+    cv.style.width=Math.round(1080*sc)+'px'; cv.style.height=Math.round(600*sc)+'px';
+    document.body.classList.add('fs');
+  } else {
+    cv.width=1080; cv.height=600; cv.style.width=''; cv.style.height='';
+    document.body.classList.remove('fs');
+  }
+  CW=cv.width/COLS; CH=cv.height/ROWS;
+  ctx.font='bold '+Math.max(6,Math.floor(CH))+'px ui-monospace, Menlo, Consolas, monospace';
+}
+function toggleFullscreen(){
+  if(document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(()=>{});
+}
+window.addEventListener('resize', resizeCanvas);
+document.addEventListener('fullscreenchange', resizeCanvas);
 const cv=document.getElementById('game'), ctx=cv.getContext('2d');
 ctx.font='bold 8px ui-monospace, Menlo, Consolas, monospace';
 ctx.textBaseline='top';
@@ -300,9 +335,181 @@ function applyUpgrade(u){
   log('UPGRADE: '+u.name+' — '+u.desc);
 }
 // --- audio: tiny WebAudio bleeps, no assets ---
-let AC=null, muted=false;
-function beep(f,d,type,g){ if(muted) return; try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(), gn=AC.createGain(); o.type=type||'square'; o.frequency.value=f; gn.gain.value=g||0.05; o.connect(gn); gn.connect(AC.destination); o.start(); gn.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime+d); o.stop(AC.currentTime+d);}catch(e){} }
-function sfx(n){ if(n==='shoot')beep(180,0.08,'square',0.06); if(n==='shotgun')beep(90,0.18,'sawtooth',0.09); if(n==='hit')beep(320,0.05,'square',0.04); if(n==='hurt')beep(70,0.2,'sawtooth',0.09); if(n==='pickup')beep(660,0.09,'sine',0.06); if(n==='level') {beep(523,0.1,'sine',0.06); setTimeout(()=>beep(784,0.15,'sine',0.06),90);} if(n==='die')beep(50,0.4,'sawtooth',0.08); if(n==='exit') {beep(440,0.1,'sine',0.06); setTimeout(()=>beep(660,0.1,'sine',0.06),100); setTimeout(()=>beep(880,0.2,'sine',0.06),200);} }
+let AC=null, muted=false, musicGain=null, sfxGain=null, noiseBuf=null, audioUnlocked=false;
+// --- MIDI music + SFX ---
+// Three original compositions (title 80 BPM, combat 150 BPM, boss
+// 170 BPM), embedded as base64 Standard MIDI Files and played by a
+// tiny SMF parser + Web Audio General-MIDI-ish synth below — no
+// audio files, no libraries, no network. SFX are MIDI note sequences
+// through the same synth. M mutes everything.
+const MIDI_SONGS={
+ title:'TVRoZAAAAAYAAAABAeBNVHJrAAADEQDAMADBAAD/UQMLcbAAkDk3AJA8NwCQQDcAkTlGgXCRPEYAgTkAgXCRQEYAgTwAgXCRRUYAgUAAgXCRQEYAgUUAgXCRPEYAgUAAgXCRRUYAgTwAgXCRPEYAgUUAgXCQNTcAkDk3AJA8NwCRNUYAgDkAAIA8AACAQAAAgTwAgXCROUYAgTUAgXCRPEYAgTkAgXCRQUYAgTwAgXCRPEYAgUEAgXCROUYAgTwAgXCRQUYAgTkAgXCROUYAgUEAgXCQNzcAkDw3AJBANwCRN0YAgDUAAIA5AACAPAAAgTkAgXCRPEYAgTcAgXCRQEYAgTwAgXCRQ0YAgUAAgXCRQEYAgUMAgXCRPEYAgUAAgXCRQ0YAgTwAgXCRPEYAgUMAgXCQNzcAkDs3AJA+NwCRN0YAgDcAAIA8AACAQAAAgTwAgXCRO0YAgTcAgXCRPkYAgTsAgXCRQ0YAgT4AgXCRPkYAgUMAgXCRO0YAgT4AgXCRQ0YAgTsAgXCRO0YAgUMAgXCQOTcAkDw3AJBANwCROUYAgDcAAIA7AACAPgAAgTsAgXCRPEYAgTkAgXCRQEYAgTwAgXCRRUYAgUAAgXCRQEYAgUUAgXCRPEYAgUAAgXCRRUYAgTwAgXCRPEYAgUUAgXCQNTcAkDk3AJA8NwCRNUYAgDkAAIA8AACAQAAAgTwAgXCROUYAgTUAgXCRPEYAgTkAgXCRQUYAgTwAgXCRPEYAgUEAgXCROUYAgTwAgXCRQUYAgTkAgXCROUYAgUEAgXCQNzcAkDw3AJBANwCRN0YAgDUAAIA5AACAPAAAgTkAgXCRPEYAgTcAgXCRQEYAgTwAgXCRQ0YAgUAAgXCRQEYAgUMAgXCRPEYAgUAAgXCRQ0YAgTwAgXCRPEYAgUMAgXCQNDcAkDg3AJA7NwCRNEYAgDcAAIA8AACAQAAAgTwAgXCROEYAgTQAgXCRO0YAgTgAgXCRQEYAgTsAgXCRO0YAgUAAgXCROEYAgTsAgXCRQEYAgTgAgXCROEYAgUAAgXCANAAAgDgAAIA7AACBOAAA/y8A',
+ combat:'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',
+ boss:'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',
+};
+function b64ToBytes(b64){ const bin=atob(b64); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i); return a; }
+// Tiny SMF parser (format 0/1): header, tracks, VLQ deltas, running
+// status, meta tempo, program change, note on/off. Returns
+// {tpq, tempo (us/quarter), duration (ticks), events:[...]}.
+function parseMidi(bytes){
+  let i=0;
+  const rd32=()=>{ const v=(bytes[i]<<24)|(bytes[i+1]<<16)|(bytes[i+2]<<8)|bytes[i+3]; i+=4; return v; };
+  const rd16=()=>{ const v=(bytes[i]<<8)|bytes[i+1]; i+=2; return v; };
+  if(bytes[0]!==0x4d||bytes[1]!==0x54||bytes[2]!==0x68||bytes[3]!==0x64) return null; // 'MThd'
+  i=4; const hlen=rd32(), fmt=rd16(), ntrk=rd16(), tpq=rd16();
+  const events=[]; let tempo=500000, duration=0;
+  for(let t=0;t<ntrk;t++){
+    if(bytes[i]!==0x4d||bytes[i+1]!==0x54||bytes[i+2]!==0x72||bytes[i+3]!==0x6b) break; // 'MTrk'
+    i+=4; const tlen=rd32(); const end=i+tlen; let tick=0, status=0;
+    const vlq=()=>{ let v=0; while(i<end){ const b=bytes[i++]; v=(v<<7)|(b&0x7f); if(!(b&0x80)) break; } return v; };
+    while(i<end){
+      tick+=vlq();
+      let b=bytes[i];
+      if(b&0x80){ status=b; i++; } // else running status
+      const type=status&0xf0, ch=status&0x0f;
+      if(status===0xff){ const meta=bytes[i++]; const len=vlq(); if(meta===0x51&&len===3){ tempo=(bytes[i]<<16)|(bytes[i+1]<<8)|bytes[i+2]; } i+=len; }
+      else if(status===0xf0||status===0xf7){ const len=vlq(); i+=len; }
+      else if(type===0xc0||type===0xd0){ events.push({tick:tick,type:'prog',ch:ch,prog:bytes[i++]}); }
+      else if(type===0x80||type===0x90){ const note=bytes[i++], vel=bytes[i++]; events.push({tick:tick,type:(type===0x90&&vel>0)?'on':'off',ch:ch,note:note,vel:vel}); }
+      else if(type===0xa0||type===0xb0||type===0xe0){ i+=2; }
+      else break;
+    }
+    duration=Math.max(duration,tick);
+    i=end;
+  }
+  events.sort((a,b)=>a.tick-b.tick);
+  return {tpq:tpq, tempo:tempo, duration:duration, events:events};
+}
+function ensureAudio(){
+  if(!AC){
+    try{
+      AC=new (window.AudioContext||window.webkitAudioContext)();
+      musicGain=AC.createGain(); musicGain.gain.value=0.45; musicGain.connect(AC.destination);
+      sfxGain=AC.createGain(); sfxGain.gain.value=0.9; sfxGain.connect(AC.destination);
+      noiseBuf=AC.createBuffer(1, AC.sampleRate*0.5, AC.sampleRate);
+      const d=noiseBuf.getChannelData(0); for(let j=0;j<d.length;j++) d[j]=Math.random()*2-1;
+    }catch(e){ AC=null; }
+  }
+  if(AC&&AC.state==='suspended') AC.resume();
+  audioUnlocked=true;
+}
+function unlockAudio(){ ensureAudio(); if(state==='title'&&!music.current) startMusic('title'); }
+function midiFreq(n){ return 440*Math.pow(2,(n-69)/12); }
+function progWave(prog){
+  if(prog>=24&&prog<=39) return 'sawtooth'; // guitars + bass
+  if(prog>=40&&prog<=47) return 'triangle'; // strings, soft
+  if(prog>=48&&prog<=55) return 'sawtooth'; // ensemble
+  if(prog>=56&&prog<=63) return 'sawtooth'; // brass
+  if(prog>=80&&prog<=87) return 'square'; // lead
+  return 'triangle'; // piano etc.
+}
+function playMidiNote(dest, note, vel, dur, wave, when){
+  if(!AC) return;
+  const o=AC.createOscillator(), g=AC.createGain();
+  o.type=wave; o.frequency.value=midiFreq(note);
+  const v=(vel/127)*0.5;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.linearRampToValueAtTime(v, when+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, when+Math.max(0.05,dur));
+  o.connect(g); g.connect(dest);
+  o.start(when); o.stop(when+Math.max(0.05,dur)+0.05);
+}
+function playDrum(dest, note, vel, when){
+  if(!AC) return;
+  const v=(vel/127)*0.6;
+  if(note===36){ // kick: sine pitch drop 150 -> 45 Hz
+    const o=AC.createOscillator(), g=AC.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(150,when); o.frequency.exponentialRampToValueAtTime(45,when+0.12);
+    g.gain.setValueAtTime(v,when); g.gain.exponentialRampToValueAtTime(0.0001,when+0.18);
+    o.connect(g); g.connect(dest); o.start(when); o.stop(when+0.2);
+  } else if(note===38||note===40){ // snare: bandpassed noise
+    const src=AC.createBufferSource(); src.buffer=noiseBuf;
+    const f=AC.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1800; f.Q.value=0.8;
+    const g=AC.createGain(); g.gain.setValueAtTime(v*0.8,when); g.gain.exponentialRampToValueAtTime(0.0001,when+0.12);
+    src.connect(f); f.connect(g); g.connect(dest); src.start(when); src.stop(when+0.15);
+  } else if(note===42||note===46){ // hats: highpassed noise, short
+    const src=AC.createBufferSource(); src.buffer=noiseBuf;
+    const f=AC.createBiquadFilter(); f.type='highpass'; f.frequency.value=7000;
+    const g=AC.createGain(); g.gain.setValueAtTime(v*0.5,when); g.gain.exponentialRampToValueAtTime(0.0001,when+(note===46?0.25:0.05));
+    src.connect(f); f.connect(g); g.connect(dest); src.start(when); src.stop(when+0.3);
+  } else if(note===49){ // crash: highpassed noise, long
+    const src=AC.createBufferSource(); src.buffer=noiseBuf;
+    const f=AC.createBiquadFilter(); f.type='highpass'; f.frequency.value=5000;
+    const g=AC.createGain(); g.gain.setValueAtTime(v*0.5,when); g.gain.exponentialRampToValueAtTime(0.0001,when+0.8);
+    src.connect(f); f.connect(g); g.connect(dest); src.start(when); src.stop(when+0.9);
+  }
+}
+// Music scheduler: 40ms lookahead loop, 0.18s ahead, loops the song.
+const music={current:null, data:null, timer:null, nextTick:0, nextTime:0, progs:{}};
+function startMusic(name){
+  if(music.current===name) return;
+  stopMusic();
+  ensureAudio(); if(!AC) return;
+  const data=parseMidi(b64ToBytes(MIDI_SONGS[name]));
+  if(!data) return;
+  music.current=name; music.data=data; music.nextTick=0; music.nextTime=AC.currentTime+0.1; music.progs={};
+  music.timer=setInterval(musicTick, 40);
+}
+function stopMusic(){
+  if(music.timer){ clearInterval(music.timer); music.timer=null; }
+  music.current=null; music.data=null;
+}
+function musicTick(){
+  if(!AC||!music.data) return;
+  musicGain.gain.value=muted?0:0.45;
+  const spb=music.data.tempo/1e6/music.data.tpq; // seconds per tick
+  const ahead=AC.currentTime+0.18;
+  let guard=0;
+  while(music.nextTime<ahead && guard++<200){
+    const evs=music.data.events.filter(e=>e.tick===music.nextTick);
+    if(evs.length===0){
+      const nxt=music.data.events.find(e=>e.tick>music.nextTick);
+      if(!nxt){ music.nextTick=0; music.progs={}; continue; }
+      music.nextTime+=(nxt.tick-music.nextTick)*spb; music.nextTick=nxt.tick;
+      continue;
+    }
+    for(const e of evs){
+      if(e.type==='prog'){ music.progs[e.ch]=e.prog; }
+      else if(e.type==='on'){
+        const off=music.data.events.find(x=>x.type==='off'&&x.ch===e.ch&&x.note===e.note&&x.tick>=e.tick);
+        const dur=((off?off.tick:e.tick+240)-e.tick)*spb;
+        if(e.ch===9) playDrum(musicGain, e.note, e.vel, music.nextTime);
+        else playMidiNote(musicGain, e.note, e.vel, dur, progWave(music.progs[e.ch]||0), music.nextTime);
+      }
+    }
+    const nxt=music.data.events.find(e=>e.tick>music.nextTick);
+    if(!nxt){ music.nextTick=0; music.progs={}; continue; }
+    music.nextTime+=(nxt.tick-music.nextTick)*spb; music.nextTick=nxt.tick;
+  }
+}
+// SFX are MIDI note sequences through the same synth:
+// {n: MIDI note, t: delay s, d: duration s, v: velocity, w: waveform}
+const MIDI_SFX={
+ shoot:[{n:82,t:0,d:0.06,v:90,w:'square'},{n:58,t:0.03,d:0.08,v:80,w:'square'}],
+ shotgun:[{n:45,t:0,d:0.15,v:110,w:'sawtooth'},{n:52,t:0,d:0.15,v:100,w:'sawtooth'},{n:57,t:0,d:0.15,v:90,w:'sawtooth'}],
+ hit:[{n:90,t:0,d:0.05,v:80,w:'square'}],
+ hurt:[{n:50,t:0,d:0.2,v:100,w:'sawtooth'},{n:46,t:0.05,d:0.2,v:90,w:'sawtooth'}],
+ pickup:[{n:72,t:0,d:0.07,v:90,w:'sine'},{n:76,t:0.06,d:0.07,v:90,w:'sine'},{n:79,t:0.12,d:0.07,v:90,w:'sine'},{n:84,t:0.18,d:0.12,v:100,w:'sine'}],
+ level:[{n:60,t:0,d:0.1,v:90,w:'sine'},{n:64,t:0.09,d:0.1,v:90,w:'sine'},{n:67,t:0.18,d:0.1,v:90,w:'sine'},{n:72,t:0.27,d:0.15,v:100,w:'sine'}],
+ die:[{n:60,t:0,d:0.15,v:90,w:'sawtooth'},{n:58,t:0.15,d:0.15,v:90,w:'sawtooth'},{n:55,t:0.3,d:0.15,v:90,w:'sawtooth'},{n:50,t:0.45,d:0.2,v:90,w:'sawtooth'},{n:43,t:0.65,d:0.4,v:100,w:'sawtooth'}],
+ exit:[{n:60,t:0,d:0.1,v:90,w:'sine'},{n:64,t:0.1,d:0.1,v:90,w:'sine'},{n:67,t:0.2,d:0.1,v:90,w:'sine'},{n:72,t:0.3,d:0.2,v:100,w:'sine'}],
+ glory:[{n:45,t:0,d:0.2,v:110,w:'sawtooth'},{n:52,t:0,d:0.2,v:110,w:'sawtooth'},{n:57,t:0,d:0.2,v:100,w:'sawtooth'},{n:69,t:0.05,d:0.25,v:100,w:'square'}],
+ hook:[{n:76,t:0,d:0.08,v:90,w:'square'},{n:81,t:0.06,d:0.08,v:90,w:'square'},{n:86,t:0.12,d:0.12,v:100,w:'square'}],
+ explosion:[{n:36,t:0,d:0.4,v:120,w:'sawtooth'},{n:40,t:0,d:0.3,v:110,w:'sawtooth'},{n:43,t:0.05,d:0.3,v:100,w:'sawtooth'}],
+};
+function sfx(n){
+  if(muted) return; ensureAudio(); if(!AC) return;
+  const seq=MIDI_SFX[n]; if(!seq) return;
+  const t0=AC.currentTime+0.01;
+  for(const e of seq) playMidiNote(sfxGain, e.n, e.v, e.d, e.w, t0+e.t);
+  if(n==='explosion'||n==='shotgun') playDrum(sfxGain, 36, 110, t0);
+}
+// beep() kept for old call sites: freq -> nearest MIDI note.
+function beep(f,d,type,g){
+  if(muted) return; ensureAudio(); if(!AC) return;
+  const n=Math.max(21,Math.min(108,Math.round(69+12*Math.log2(f/440))));
+  playMidiNote(sfxGain, n, Math.round((g||0.05)*1200), d, type==='square'?'square':type==='sine'?'sine':'sawtooth', AC.currentTime+0.01);
+}
 // --- game state ---
 let state='title'; // title | play | levelup | floorclear | dead | paused
 let player, grid, mapW, mapH, enemies, items, doors, pushwalls, depth, runSeed, theme, logs=[];
@@ -435,6 +642,7 @@ function genLevel(d){
   // door on this floor can be opened
   if(d>1){ const r=pick(rooms.slice(1)); items.push({x:r.cx+0.5,y:r.cy+0.5,kind:'key1'}); }
   log('FLOOR '+d+' — '+theme.name+' — '+rooms.length+' rooms, '+enemies.length+' hostiles, '+doors.length+' doors. Seed '+(runSeed+d*7919));
+  if(audioUnlocked) startMusic(d%3===0?'boss':'combat'); // boss floors get the fast track
 }
 function offerChoices(n){
   levelChoices=shuffle(UPGRADES.slice()).slice(0,n); choiceSel=0;
@@ -477,7 +685,7 @@ function castRay(angle){
   return {dist:64,side:0,type:1,tex:0};
 }
 // --- combat ---
-let shootCd=0, spaceEdge=false;
+let shootCd=0, spaceEdge=false, hurtBobT=-99; // hurtBobT: bobT when last hurt (HUD face grimace)
 let projectiles=[]; // player projectiles (rocket / plasma / BFG ball)
 let hookCd=0, hookT=0, hookTarget=null; // Doom Eternal meat hook
 // --- Doom Eternal Super Shotgun meat hook ---
@@ -506,7 +714,7 @@ function fireHook(){
   const dmg=20*player.dmgMul; best.hp-=dmg; best.flash=0.2;
   if(best.hp<=0) killEnemy(best,false);
   log('🔗 MEAT HOOK — latched onto '+(ENEMY_TYPES[best.type].name||best.type.toUpperCase())+'!');
-  sfx('shotgun');
+  sfx('hook');
 }
 // --- Doom Eternal glory kills ---
 // Stagger: damage builds a meter; at 50% of max HP (boss immune) the
@@ -540,7 +748,7 @@ function doGloryKill(e){
   givePoints(100);
   killEnemy(e,false);
   player.gloryKills=(player.gloryKills||0)+1;
-  flash=0.2; shake=3; sfx('level');
+  flash=0.2; shake=3; sfx('glory');
   log('💀 GLORY KILL! '+name+' — +15 HP, +100 bonus, food dropped');
 }
 // Wolf3D FirstSighting (WL_STATE.C): enemy wakes, speed multiplier
@@ -635,7 +843,7 @@ function updateProjectiles(dt){
   projectiles=projectiles.filter(pr=>!pr.dead);
 }
 function explodeProjectile(pr, direct){
-  pr.dead=true; flash=0.15; shake=Math.max(shake,2); sfx('shotgun');
+  pr.dead=true; flash=0.15; shake=Math.max(shake,2); sfx('explosion');
   if(pr.kind==='rocket'){
     // P_RadiusAttack: blast up to 128 damage, linear falloff over
     // 2 tiles (Doom's radius is 128 units = 1 tile; doubled here so
@@ -696,6 +904,7 @@ function throwBomb(){
 }
 function hurtPlayer(dmg, from){
   if(dashTime>0||player.invulnT>0) return;
+  hurtBobT=bobT;
   const absorbed=Math.min(player.armor, dmg*0.6); player.armor-=absorbed;
   player.hp-= (dmg-absorbed); flash=0.15; shake=Math.max(shake,1); sfx('hurt');
   if(player.hp<=0){
@@ -705,7 +914,7 @@ function hurtPlayer(dmg, from){
       log('EXTRA LIFE USED — back on your feet at 50 HP ('+player.extraLives+' left)');
       sfx('level'); return;
     }
-    player.hp=0; state='dead'; sfx('die'); saveBest();
+    player.hp=0; state='dead'; stopMusic(); sfx('die'); saveBest();
   }
 }
 function saveBest(){
@@ -1050,8 +1259,8 @@ function render(){
   const spd=Math.hypot(player.momx||0, player.momy||0);
   const momT=spd*DOOM.UNITS_PER_TILE/DOOM.TICRATE; // momentum, units/tic
   const bobU=Math.min(DOOM.BOB_MAX, momT*momT/4)/2; // bob/2, units, max 8
-  const bobRows=Math.sin(bobT*2*Math.PI/DOOM.BOB_CYCLE)*bobU/41*(ROWS/2);
-  const horizon=ROWS>>1;
+  const bobRows=Math.sin(bobT*2*Math.PI/DOOM.BOB_CYCLE)*bobU/41*(VIEW_ROWS/2);
+  const horizon=VIEW_ROWS>>1; // centre of the 3D view, above the HUD bar
   const fov=Math.PI/3;
   // walls + floor/ceiling per column
   for(let x=0;x<COLS;x++){
@@ -1059,19 +1268,19 @@ function render(){
     const r=castRay(a);
     const dist=r.dist*Math.cos(a-player.ang); // fisheye correction
     zbuf[x]=dist;
-    const wallH=Math.min(ROWS, Math.floor(ROWS*0.9/Math.max(0.15,dist)));
+    const wallH=Math.min(VIEW_ROWS, Math.floor(VIEW_ROWS*0.9/Math.max(0.15,dist)));
     const top=horizon-(wallH>>1), bot=top+wallH;
     const art=WALL_ART[r.type]||WALL_ART[1];
     const texX=Math.min(7,Math.floor(r.tex*8));
     const baseCol=theme.wall[(r.type-1)%theme.wall.length];
-    for(let y=0;y<ROWS;y++){
+    for(let y=0;y<VIEW_ROWS;y++){
       if(y<top){
         // ceiling: Unicode dots on a coloured background
         const ch=y%3===0?'·':(y%3===1?'°':' ');
         put(x,y,ch, shadeColor(theme.ceil, 1), shadeColor(theme.ceil, 4));
       } else if(y>=bot){
         // floor: block-density gradient by row distance, coloured bg
-        const fd=(y-horizon)/Math.max(1,(ROWS-horizon));
+        const fd=(y-horizon)/Math.max(1,(VIEW_ROWS-horizon));
         const ch=fd<0.25?'▓':fd<0.5?'▒':fd<0.75?'░':'·';
         put(x,y,ch, shadeColor(theme.floor, 1+fd*4), shadeColor(theme.floor, 3+fd*4));
       } else {
@@ -1097,7 +1306,7 @@ function render(){
     let da=Math.atan2(dy,dx)-player.ang; while(da>Math.PI)da-=2*Math.PI; while(da<-Math.PI)da+=2*Math.PI;
     if(Math.abs(da)>fov/2+0.3) continue;
     const sx=Math.floor((0.5+da/fov)*COLS);
-    const h=Math.floor(ROWS*0.9/d*s.scale*0.9), w=Math.floor(h*0.7);
+    const h=Math.floor(VIEW_ROWS*0.9/d*s.scale*0.9), w=Math.floor(h*0.7);
     const top=horizon-(h>>1);
     const art=s.art, ah=art.length, aw=art[0].length;
     for(let sy=0;sy<h;sy++){
@@ -1130,28 +1339,22 @@ function render(){
   }
   // weapon (bottom centre, drawn 2x so it stays chunky at 180 cols) + muzzle flash
   const wArt=WEAPON_ART[player.weapon];
-  const wBob=Math.round(Math.sin(bobT*2*Math.PI/1.83)*bobU/41*(ROWS/2)*0.5);
-  const wx=Math.floor(COLS/2)-8, wy=ROWS-wArt.length*2-1+wBob;
+  const wBob=Math.round(Math.sin(bobT*2*Math.PI/1.83)*bobU/41*(VIEW_ROWS/2)*0.5);
+  const wx=Math.floor(COLS/2)-8, wy=VIEW_ROWS-wArt.length*2-1+wBob; // weapon sits just above the HUD bar
   for(let y=0;y<wArt.length;y++) for(let x=0;x<wArt[y].length;x++){ const ch=wArt[y][x]; if(ch!==' ') { put(wx+x*2,wy+y*2,ch, flash>0?'#ffd75e':'#c8c8c8'); put(wx+x*2+1,wy+y*2,ch, flash>0?'#ffd75e':'#c8c8c8'); put(wx+x*2,wy+y*2+1,ch, flash>0?'#ffd75e':'#c8c8c8'); put(wx+x*2+1,wy+y*2+1,ch, flash>0?'#ffd75e':'#c8c8c8'); } }
   if(flash>0){ put(Math.floor(COLS/2), wy-1, '*', '#ffffff'); put(Math.floor(COLS/2)+1, wy-1, '*', '#ffd75e'); put(Math.floor(COLS/2), wy-2, '*', '#ffd75e'); put(Math.floor(COLS/2)-1, wy-1, '*', '#ffd75e'); }
-  // HUD
-  drawText(0,0,'QWERTYSTEIN  FLOOR '+depth+' '+theme.name+'  SEED '+runSeed, '#ffd75e');
-  const hw=WEAPONS[player.weapon];
-  drawText(0,1,'HP '+Math.ceil(player.hp)+'/'+player.maxHp+'  ARM '+Math.floor(player.armor)+'  '+hw.name+' '+(hw.ammoType?hw.ammoType.toUpperCase()+' '+player.ammo[hw.ammoType]:'∞')+'  BOMBS '+player.bombs+'  DASH '+(player.dashCd<=0?'READY':Math.ceil(player.dashCd)+'s')+(player.weapon===3?'  HOOK '+(hookCd<=0?'READY':Math.ceil(hookCd)+'s'):''), '#7ee081');
-  drawText(0,2,'LV '+player.level+'  XP '+Math.floor(player.xp)+'/'+player.xpNext+'  SCORE '+player.score+'  KILLS '+player.kills+'  GOLD '+player.gold+'  KEYS '+(player.keys&1?'GOLD':'-')+'  LIVES '+player.extraLives+'  GLORY '+player.gloryKills+'  AMMO B'+player.ammo.bullets+' S'+player.ammo.shells+' R'+player.ammo.rockets+' C'+player.ammo.cells, '#c0c0c0');
+  // HUD — Doom/Wolf3D status bar along the bottom (see drawHud)
+  drawHud();
   // Wolf3D elevator prompt: press E at the exit tile
-  for(const it of items) if(!it.taken&&it.kind==='exit'&&Math.hypot(it.x-player.x,it.y-player.y)<2.5) drawText(Math.floor(COLS/2)-14, ROWS-14, 'ELEVATOR — press E to descend', '#7ee081');
+  for(const it of items) if(!it.taken&&it.kind==='exit'&&Math.hypot(it.x-player.x,it.y-player.y)<2.5) drawText(Math.floor(COLS/2)-14, VIEW_ROWS-14, 'ELEVATOR — press E to descend', '#7ee081');
   if(padName) drawText(COLS-28,0,'PAD: '+padName.slice(0,22), '#7ee081');
-  // XP bar
-  const xpW=Math.floor(COLS*0.3), xpF=Math.floor(xpW*player.xp/player.xpNext);
-  for(let i=0;i<xpW;i++) put(i,3, i<xpF?'█':'░', '#7ee081', '#000000');
   // glory-kill prompt: a staggered enemy in range
   for(const e of enemies) if(!e.dead&&e.staggered&&Math.hypot(e.x-player.x,e.y-player.y)<2.5){
-    drawText(Math.floor(COLS/2)-19, ROWS-12, '💀 STAGGERED — press E for GLORY KILL 💀', '#ffd75e'); break;
+    drawText(Math.floor(COLS/2)-19, VIEW_ROWS-12, '💀 STAGGERED — press E for GLORY KILL 💀', '#ffd75e'); break;
   }
   if(gloryT>0){
     overlayText('💀 GLORY KILL 💀', '#ffd75e');
-    drawText(Math.floor((COLS-gloryLine.length)/2), Math.floor(ROWS/2)+2, gloryLine, '#ffffff');
+    drawText(Math.floor((COLS-gloryLine.length)/2), Math.floor(VIEW_ROWS/2)+2, gloryLine, '#ffffff');
   }
   // minimap top-right
   const mw=28, mh=28, ox=COLS-mw-1, oy=5;
@@ -1163,7 +1366,7 @@ function render(){
   for(const e of enemies) if(!e.dead) put(ox+Math.floor(e.x/mapW*mw), oy+Math.floor(e.y/mapH*mh), 'x', '#ff6060');
   for(const it of items) if(!it.taken&&it.kind==='exit') put(ox+Math.floor(it.x/mapW*mw), oy+Math.floor(it.y/mapH*mh), 'E', '#7ee081');
   // logs bottom-left above weapon
-  logs.forEach((m,i)=>drawText(0, ROWS-6+i, m.slice(0,90), '#888888'));
+  logs.forEach((m,i)=>drawText(0, VIEW_ROWS-6+i, m.slice(0,90), '#888888'));
   // overlays
   if(state==='title') overlayTitle();
   if(state==='levelup'||state==='floorclear') overlayChoices();
@@ -1192,8 +1395,61 @@ function render(){
   }
 }
 function maxHpSafe(e){ return e.maxHp||1; }
+// --- Doom/Wolf3D status bar: 10 rows at the bottom of the buffer ---
+// Face in the middle (Doom), health/armor/ammo on the left, score /
+// floor / keys on the right, XP bar along the very bottom edge.
+// Values are drawn twice (two rows) so they read as chunky numerals.
+function drawHud(){
+  const y0=VIEW_ROWS, BG='#1c1c22';
+  for(let y=y0;y<ROWS;y++) for(let x=0;x<COLS;x++) put(x,y,' ','#000',BG);
+  for(let x=0;x<COLS;x++) put(x,y0,'─','#555555',BG);
+  const hpC=player.hp>=50?'#7ee081':player.hp>=25?'#ffd75e':'#ff6060';
+  const hpS=String(Math.ceil(player.hp)), armS=String(Math.floor(player.armor));
+  const hw=WEAPONS[player.weapon];
+  const ammoS=hw.ammoType?String(player.ammo[hw.ammoType]):'∞';
+  // left: health / armor / ammo
+  drawText(2,y0+1,'HEALTH','#888888',BG);
+  drawText(2,y0+3,hpS+'%',hpC,BG); drawText(2,y0+4,hpS+'%',hpC,BG);
+  const hb=Math.round(16*player.hp/player.maxHp);
+  for(let i=0;i<16;i++) put(2+i,y0+6, i<hb?'█':'░', hpC, BG);
+  drawText(24,y0+1,'ARMOR','#888888',BG);
+  drawText(24,y0+3,armS,'#7ee081',BG); drawText(24,y0+4,armS,'#7ee081',BG);
+  const ab=Math.round(16*player.armor/100);
+  for(let i=0;i<16;i++) put(24+i,y0+6, i<ab?'█':'░', '#7ee081', BG);
+  drawText(46,y0+1,hw.name,'#888888',BG);
+  drawText(46,y0+3,ammoS,'#ffd75e',BG); drawText(46,y0+4,ammoS,'#ffd75e',BG);
+  drawText(46,y0+6,(hw.ammoType?hw.ammoType.toUpperCase():'MELEE')+'  BOMBS '+player.bombs+'  DASH '+(player.dashCd<=0?'READY':Math.ceil(player.dashCd)+'s')+(player.weapon===3?'  HOOK '+(hookCd<=0?'READY':Math.ceil(hookCd)+'s'):''),'#c0c0c0',BG);
+  // face (Doom): centre, reacts to health, recent hurt, glory kills
+  let face='🙂';
+  if(state==='dead'||player.hp<=0) face='💀';
+  else if(gloryT>0) face='😈';
+  else if(bobT-hurtBobT<0.5) face='😬';
+  else if(player.hp<25) face='😵';
+  else if(player.hp<50) face='😟';
+  else if(player.hp<75) face='😐';
+  const fx=Math.floor(COLS/2)-3, fy=y0+1;
+  drawText(fx,fy,'┌─────┐','#888888',BG);
+  for(let i=1;i<=5;i++) drawText(fx,fy+i,'│     │','#888888',BG);
+  drawText(fx,fy+6,'└─────┘','#888888',BG);
+  put(fx+3,fy+3,face,'#ffffff',BG);
+  // right: score / floor / keys / music
+  drawText(100,y0+1,'SCORE','#888888',BG);
+  drawText(100,y0+3,String(player.score),'#ffffff',BG); drawText(100,y0+4,String(player.score),'#ffffff',BG);
+  drawText(100,y0+6,'KILLS '+player.kills+'  GOLD '+player.gold,'#c0c0c0',BG);
+  drawText(122,y0+1,'FLOOR '+depth+' '+theme.name.toUpperCase(),'#888888',BG);
+  drawText(122,y0+3,'LV '+player.level+'  LIVES '+player.extraLives+'  GLORY '+player.gloryKills,'#c0c0c0',BG);
+  drawText(122,y0+4,'KEYS '+(player.keys&1?'GOLD':'—'),'#ffd75e',BG);
+  drawText(122,y0+6,'AMMO B'+player.ammo.bullets+' S'+player.ammo.shells+' R'+player.ammo.rockets+' C'+player.ammo.cells,'#c0c0c0',BG);
+  drawText(150,y0+1,muted?'MUTED':'♪ '+(music.current?music.current.toUpperCase():'—'),'#888888',BG);
+  drawText(150,y0+3,'SEED '+runSeed,'#888888',BG);
+  drawText(150,y0+4,'M mute  P pause','#888888',BG);
+  // XP bar along the very bottom edge
+  const xpF=Math.floor(COLS*player.xp/player.xpNext);
+  for(let i=0;i<COLS;i++) put(i,ROWS-1, i<xpF?'█':'░', '#7ee081', BG);
+}
+function maxHpSafe(e){ return e.maxHp||1; }
 function overlayText(s,c){
-  drawText(Math.floor((COLS-s.length)/2), Math.floor(ROWS/2), s, c);
+  drawText(Math.floor((COLS-s.length)/2), Math.floor(VIEW_ROWS/2), s, c);
 }
 function overlayTitle(){
   const lines=[
@@ -1243,6 +1499,7 @@ function overlayDead(){
 }
 // --- input ---
 document.addEventListener('keydown', e=>{
+  unlockAudio();
   keys[e.code]=true;
   if(e.code==='Space'){ e.preventDefault(); if(state==='play') spaceEdge=true; }
   if(state==='title'&&(e.code==='Enter'||e.code==='Space')){ newRun(); return; }
@@ -1261,6 +1518,7 @@ document.addEventListener('keydown', e=>{
 });
 document.addEventListener('keyup', e=>{ keys[e.code]=false; });
 cv.addEventListener('click', ()=>{
+  unlockAudio();
   if(state==='title'){ newRun(); return; }
   if(state==='play'){
     try{ cv.requestPointerLock(); }catch(e){}
@@ -1273,7 +1531,7 @@ document.addEventListener('pointerlockchange', ()=>{ if(document.pointerLockElem
 // touch buttons
 document.querySelectorAll('#touch button').forEach(b=>{
   const k=b.dataset.k, act=b.dataset.act;
-  b.addEventListener('pointerdown', e=>{ e.preventDefault();
+  b.addEventListener('pointerdown', e=>{ e.preventDefault(); unlockAudio();
     if(act==='weapon'){ cycleWeapon(1); return; }
     if(act==='hook'){ fireHook(); return; }
     if(act==='pause'){ state=state==='play'?'paused':state==='paused'?'play':state; return; }
@@ -1341,6 +1599,9 @@ function loop(t){
   render();
   requestAnimationFrame(loop);
 }
+document.getElementById('fsbtn').addEventListener('click', toggleFullscreen);
+cv.addEventListener('dblclick', toggleFullscreen);
+resizeCanvas();
 state='title';
 requestAnimationFrame(loop);
 </script>
