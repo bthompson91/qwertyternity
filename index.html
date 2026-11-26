@@ -35,9 +35,9 @@
 <body>
 <div id="wrap">
 <h1>QWERTY<span>STEIN</span> — dense ASCII raycaster</h1>
-<p class="sub">Procedurally generated castle. Every run is a new seed. Die, and the run is gone. Clear a floor, pick an upgrade, go deeper. 🧱 brick 🪨 stone 🪵 wood 🔩 metal — Doom movement: momentum, friction, and view bob.</p>
+<p class="sub">Procedurally generated castle. Every run is a new seed. Die, and the run is gone. Clear a floor, pick an upgrade, go deeper. Doom movement: momentum, friction, and view bob.</p>
 <canvas id="game" width="1080" height="600"></canvas>
-<button id="fsbtn">⛶ FULLSCREEN</button>
+<button id="fsbtn">[ FULLSCREEN ]</button>
 <div id="touch">
   <div class="pad" id="stick"><span class="lbl">MOVE</span><div class="nub" id="stickNub"></div></div>
   <div class="pad" id="lookpad"><span class="lbl">LOOK — drag, tap = fire</span><div class="nub" id="lookNub"></div></div>
@@ -48,7 +48,7 @@
 <div id="padstat"></div>
 <pre id="keys"><b>WASD</b> move &nbsp; <b>Mouse</b> look (click to lock) &nbsp; <b>← →</b> turn &nbsp; <b>Click / Space</b> shoot
 <b>1-8</b> weapons: 1 Fist  2 Pistol  3 Shotgun  4 Super Shotgun  5 Chaingun  6 Rocket Launcher  7 Plasma Gun  8 BFG9000 &nbsp; <b>F</b> meat hook (Super Shotgun) &nbsp; <b>Shift</b> run
-<b>Q</b> dash &nbsp; <b>T</b> throw bomb &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>N</b> new run (on death) &nbsp; <b>E</b> use (door / pushwall / elevator) / <b>💀 glory kill</b> a staggered enemy
+<b>Q</b> dash &nbsp; <b>T</b> throw bomb &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>N</b> new run (on death) &nbsp; <b>E</b> use (door / pushwall / elevator) / <b>glory kill</b> a staggered enemy
 <b>QWERTY tip:</b> strafe with <b>Q/E</b>? No — Q is dash, E is nothing. Strafe is A/D while turning with the mouse. That's the QWERTYSTEIN way.
 Find the glowing <b>[EXIT]</b> portal on each floor. Kills give XP. Level up: press <b>1 / 2 / 3</b> to pick an upgrade.
 <b>Phone:</b> left pad = move stick, right pad = drag to look (tap it to fire), FIRE / DASH / BOMB buttons below. Also works by touch on the game itself: left half drag = move, right half drag = look, tap right = fire.
@@ -159,14 +159,18 @@ const THEMES=[
 ];
 // 8x8 ASCII wall tiles, one per wall type (index 1..4)
 const WALL_ART={
- 1:[["🧱","🧱","🧱","🧱","🧱","🧱","🧱","🧱"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🧱","🧱","🧱","🧱","🧱","🧱","🧱","🧱"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🧱","🧱","🧱","🧱","🧱","🧱","🧱","🧱"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🧱","🧱","🧱","🧱","🧱","🧱","🧱","🧱"],["▓","▓","▓","▓","▓","▓","▓","▓"]], // brick
- 2:[["🪨","🪨","🪨","🪨","🪨","🪨","🪨","🪨"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🪨","🪨","🪨","🪨","🪨","🪨","🪨","🪨"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🪨","🪨","🪨","🪨","🪨","🪨","🪨","🪨"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🪨","🪨","🪨","🪨","🪨","🪨","🪨","🪨"],["▓","▓","▓","▓","▓","▓","▓","▓"]], // stone
- 3:[["🪵","🪵","🪵","🪵","🪵","🪵","🪵","🪵"],["▌","▌","▌","▌","▌","▌","▌","▌"],["🪵","🪵","🪵","🪵","🪵","🪵","🪵","🪵"],["▌","▌","▌","▌","▌","▌","▌","▌"],["🪵","🪵","🪵","🪵","🪵","🪵","🪵","🪵"],["▌","▌","▌","▌","▌","▌","▌","▌"],["🪵","🪵","🪵","🪵","🪵","🪵","🪵","🪵"],["▌","▌","▌","▌","▌","▌","▌","▌"]], // wood
- 4:[["🔩","🔩","🔩","🔩","🔩","🔩","🔩","🔩"],["▚","▞","▚","▞","▚","▞","▚","▞"],["🔩","🔩","🔩","🔩","🔩","🔩","🔩","🔩"],["▚","▞","▚","▞","▚","▞","▚","▞"],["🔩","🔩","🔩","🔩","🔩","🔩","🔩","🔩"],["▚","▞","▚","▞","▚","▞","▚","▞"],["🔩","🔩","🔩","🔩","🔩","🔩","🔩","🔩"],["▚","▞","▚","▞","▚","▞","▚","▞"]], // metal
- 5:[["🟨","🟨","🟨","🟨","🟨","🟨","🟨","🟨"],["█","█","█","█","█","█","█","█"],["🟨","🟨","🟨","🟨","🟨","🟨","🟨","🟨"],["█","█","█","█","█","█","█","█"],["🟨","🟨","🟨","🟨","🟨","🟨","🟨","🟨"],["█","█","█","█","█","█","█","█"],["🟨","🟨","🟨","🟨","🟨","🟨","🟨","🟨"],["█","█","█","█","█","█","█","█"]], // vault — gold blocks
- 6:[["🚪","🚪","🚪","🚪","🚪","🚪","🚪","🚪"],["▌","█","█","█","█","█","█","▐"],["🚪","🚪","🚪","🚪","🚪","🚪","🚪","🚪"],["▌","█","█","█","█","█","█","▐"],["🚪","🚪","🚪","🚪","🚪","🚪","🚪","🚪"],["▌","█","█","█","█","█","█","▐"],["🚪","🚪","🚪","🚪","🚪","🚪","🚪","🚪"],["▌","█","█","█","█","█","█","▐"]], // Wolf3D sliding door
- 7:[["🗿","🗿","🗿","🗿","🗿","🗿","🗿","🗿"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🗿","🗿","🗿","🗿","🗿","🗿","🗿","🗿"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🗿","🗿","🗿","🗿","🗿","🗿","🗿","🗿"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🗿","🗿","🗿","🗿","🗿","🗿","🗿","🗿"],["▓","▓","▓","▓","▓","▓","▓","▓"]], // pushwall — a statue that slides
+ 1:['████████','▓▓▓▓▓▓▓▓','████████','▓▓▓▓▓▓▓▓','████████','▓▓▓▓▓▓▓▓','████████','▓▓▓▓▓▓▓▓'], // brick
+ 2:['▓▓▓▓▓▓▓▓','▒▒▒▒▒▒▒▒','▓▓▓▓▓▓▓▓','▒▒▒▒▒▒▒▒','▓▓▓▓▓▓▓▓','▒▒▒▒▒▒▒▒','▓▓▓▓▓▓▓▓','▒▒▒▒▒▒▒▒'], // stone
+ 3:['▌▌▌▌▌▌▌▌','▐▐▐▐▐▐▐▐','▌▌▌▌▌▌▌▌','▐▐▐▐▐▐▐▐','▌▌▌▌▌▌▌▌','▐▐▐▐▐▐▐▐','▌▌▌▌▌▌▌▌','▐▐▐▐▐▐▐▐'], // wood planks
+ 4:['▚▞▚▞▚▞▚▞','▞▚▞▚▞▚▞▚','▚▞▚▞▚▞▚▞','▞▚▞▚▞▚▞▚','▚▞▚▞▚▞▚▞','▞▚▞▚▞▚▞▚','▚▞▚▞▚▞▚▞','▞▚▞▚▞▚▞▚'], // metal
+ 5:['████████','▒▒▒▒▒▒▒▒','████████','▒▒▒▒▒▒▒▒','████████','▒▒▒▒▒▒▒▒','████████','▒▒▒▒▒▒▒▒'], // vault — gold blocks
+ 6:['▌██████▐','▌▓▓▓▓▓▓▐','▌██████▐','▌▓▓▓▓▓▓▐','▌██████▐','▌▓▓▓▓▓▓▐','▌██████▐','▌▓▓▓▓▓▓▐'], // Wolf3D sliding door
+ 7:['▓▓▓▓▓▓▓▓','▚▞▚▞▚▞▚▞','▓▓▓▓▓▓▓▓','▚▞▚▞▚▞▚▞','▓▓▓▓▓▓▓▓','▚▞▚▞▚▞▚▞','▓▓▓▓▓▓▓▓','▚▞▚▞▚▞▚▞'], // pushwall — a statue that slides
 };
+// Wall art is plain 8x8 tiles of block characters (all BMP, one code
+// unit each), so art[texY][texX] indexes one character. Emoji were
+// removed: colour emoji ignore fillStyle, render wider than a cell,
+// and split across surrogate pairs, which broke the blit.
 const SHADE=['#ffffff','#e8e8e8','#c8c8c8','#a0a0a0','#787878','#585858','#383838','#222222'];
 function shadeColor(hex, dist){
   // darken a hex colour by distance; returns rgb string
@@ -281,13 +285,9 @@ const SPRITES={
  key1:["  K  "," KKK ","  K  ","  K  ","  K  "],
 };
 // Emoji centre for each sprite, drawn over the ASCII art.
-const EMOJI={
- guard:'🪖', officer:'🎖️', ss:'💀', dog:'🐕', mutant:'👹', boss:'😈',
- health:'💊', firstaid:'💊', food:'🍗', ammo:'📦', clip:'📦',
- gold:'💰', cross:'✝️', chalice:'🏆', bible:'📖', crown:'👑',
- shells:'🐚', rockets:'🚀', cells:'🔋', rocket:'🚀', plasma:'🔵', bfg:'🟢',
- key:'🔑', key1:'🔑', bomb:'💣', exit:'🛗',
-};
+// No emoji anywhere in the game: sprites are ASCII art only, and
+// projectiles are single ASCII characters (rocket '*', plasma 'o',
+// BFG '@'). Emoji rendered wider than a cell and ignored fillStyle.
 // Enemy stats straight from WL_ACT2.C starthitpoints + WL_STATE.C KillActor.
 // Speeds are Wolf3D chase multipliers over SPDPATROL 512 (guard x3,
 // officer x5, SS x4, mutant x3, dog x2 at SPDDOG 1500); patrol speed is
@@ -713,7 +713,7 @@ function fireHook(){
   best.burning=true; best.burnT=3; addStagger(best,20);
   const dmg=20*player.dmgMul; best.hp-=dmg; best.flash=0.2;
   if(best.hp<=0) killEnemy(best,false);
-  log('🔗 MEAT HOOK — latched onto '+(ENEMY_TYPES[best.type].name||best.type.toUpperCase())+'!');
+  log('MEAT HOOK — latched onto '+(ENEMY_TYPES[best.type].name||best.type.toUpperCase())+'!');
   sfx('hook');
 }
 // --- Doom Eternal glory kills ---
@@ -735,13 +735,13 @@ function addStagger(e, dmg){
   e.stagger=(e.stagger||0)+dmg;
   if(e.stagger>=e.maxHp*0.5 && e.hp>0){
     e.staggered=true; e.staggerT=3; e.state='stagger';
-    log('💀 '+(ENEMY_TYPES[e.type].name||e.type.toUpperCase())+' STAGGERED — press E for a GLORY KILL!');
+    log((ENEMY_TYPES[e.type].name||e.type.toUpperCase())+' STAGGERED — press E for a GLORY KILL!');
     sfx('hit');
   }
 }
 function doGloryKill(e){
   const name=ENEMY_TYPES[e.type].name||e.type.toUpperCase();
-  gloryT=0.9; gloryLine='💀 GLORY KILL — '+GLORY_LINES[e.type];
+  gloryT=0.9; gloryLine='GLORY KILL — '+GLORY_LINES[e.type];
   player.invulnT=1.5;
   player.hp=Math.min(player.maxHp, player.hp+15);
   items.push({x:e.x,y:e.y,kind:'food'});
@@ -749,7 +749,7 @@ function doGloryKill(e){
   killEnemy(e,false);
   player.gloryKills=(player.gloryKills||0)+1;
   flash=0.2; shake=3; sfx('glory');
-  log('💀 GLORY KILL! '+name+' — +15 HP, +100 bonus, food dropped');
+  log('GLORY KILL! '+name+' — +15 HP, +100 bonus, food dropped');
 }
 // Wolf3D FirstSighting (WL_STATE.C): enemy wakes, speed multiplier
 function firstSighting(e){
@@ -1296,9 +1296,9 @@ function render(){
   }
   // sprites: items + enemies, far to near, with z-buffer
   const sprs=[];
-  for(const it of items) if(!it.taken&&SPRITES[it.kind]) sprs.push({x:it.x,y:it.y,art:SPRITES[it.kind],emo:EMOJI[it.kind],color:it.kind==='exit'?'#7ee081':(it.kind==='firstaid'||it.kind==='food')?'#ff7070':(it.kind==='cross'||it.kind==='chalice'||it.kind==='bible'||it.kind==='crown'||it.kind==='key1')?'#ffd75e':'#c0c0c0',scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
-  for(const e of enemies) if(!e.dead){ const b=ENEMY_TYPES[e.type]; sprs.push({x:e.x,y:e.y,art:SPRITES[b.spr],emo:EMOJI[b.spr],color:e.staggered?(Math.floor(e.staggerT*6)%2===0?'#ffffff':'#ffd75e'):(e.flash>0?'#ffffff':b.color),scale:e.type==='boss'?1.6:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e),stag:e.staggered}); }
-  for(const pr of projectiles) sprs.push({x:pr.x,y:pr.y,art:[" "],emo:EMOJI[pr.kind],color:'#ffffff',scale:0.5,dist:Math.hypot(pr.x-player.x,pr.y-player.y)});
+  for(const it of items) if(!it.taken&&SPRITES[it.kind]) sprs.push({x:it.x,y:it.y,art:SPRITES[it.kind],color:it.kind==='exit'?'#7ee081':(it.kind==='firstaid'||it.kind==='food')?'#ff7070':(it.kind==='cross'||it.kind==='chalice'||it.kind==='bible'||it.kind==='crown'||it.kind==='key1')?'#ffd75e':'#c0c0c0',scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
+  for(const e of enemies) if(!e.dead){ const b=ENEMY_TYPES[e.type]; sprs.push({x:e.x,y:e.y,art:SPRITES[b.spr],color:e.staggered?(Math.floor(e.staggerT*6)%2===0?'#ffffff':'#ffd75e'):(e.flash>0?'#ffffff':b.color),scale:e.type==='boss'?1.6:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e),stag:e.staggered}); }
+  for(const pr of projectiles) sprs.push({x:pr.x,y:pr.y,art:[pr.kind==='rocket'?'*':pr.kind==='plasma'?'o':'@'],color:'#ffffff',scale:0.5,dist:Math.hypot(pr.x-player.x,pr.y-player.y)});
   sprs.sort((a,b)=>b.dist-a.dist);
   for(const s of sprs){
     const dx=s.x-player.x, dy=s.y-player.y, d=s.dist;
@@ -1320,21 +1320,20 @@ function render(){
         put(cx, top+sy, ch, shadeColor(s.color, d*0.7));
       }
     }
-    if(s.emo) put(sx, top+(h>>1), s.emo, '#ffffff');
-    if(s.stag) put(sx, top-2, '💀', '#ffd75e'); // staggered marker
+    if(s.stag) put(sx, top-2, '!', '#ffd75e'); // staggered marker
     if(s.hp!==undefined){
       const bw=7, bx=sx-(bw>>1), by=top-1;
       for(let i=0;i<bw;i++) put(bx+i,by, i/bw<s.hp?'█':'░','#ff6060');
     }
   }
-  // meat-hook chain: 🔗 cells from screen centre to the latched enemy
+  // meat-hook chain: 'o' cells from screen centre to the latched enemy
   if(hookT>0&&hookTarget&&!hookTarget.dead){
     const hdx=hookTarget.x-player.x, hdy=hookTarget.y-player.y;
     let hda=Math.atan2(hdy,hdx)-player.ang; while(hda>Math.PI)hda-=2*Math.PI; while(hda<-Math.PI)hda+=2*Math.PI;
     if(Math.abs(hda)<fov/2+0.3){
       const hsx=Math.floor((0.5+hda/fov)*COLS), cx0=Math.floor(COLS/2), st=hsx>cx0?1:-1;
-      for(let x=cx0; x!==hsx; x+=st*3) put(x, horizon, '🔗', '#c0c0c0');
-      put(hsx, horizon, '🔗', '#ffd75e');
+      for(let x=cx0; x!==hsx; x+=st*3) put(x, horizon, 'o', '#c0c0c0');
+      put(hsx, horizon, 'O', '#ffd75e');
     }
   }
   // weapon (bottom centre, drawn 2x so it stays chunky at 180 cols) + muzzle flash
@@ -1350,10 +1349,10 @@ function render(){
   if(padName) drawText(COLS-28,0,'PAD: '+padName.slice(0,22), '#7ee081');
   // glory-kill prompt: a staggered enemy in range
   for(const e of enemies) if(!e.dead&&e.staggered&&Math.hypot(e.x-player.x,e.y-player.y)<2.5){
-    drawText(Math.floor(COLS/2)-19, VIEW_ROWS-12, '💀 STAGGERED — press E for GLORY KILL 💀', '#ffd75e'); break;
+    drawText(Math.floor(COLS/2)-19, VIEW_ROWS-12, 'STAGGERED — press E for GLORY KILL', '#ffd75e'); break;
   }
   if(gloryT>0){
-    overlayText('💀 GLORY KILL 💀', '#ffd75e');
+    overlayText('GLORY KILL', '#ffd75e');
     drawText(Math.floor((COLS-gloryLine.length)/2), Math.floor(VIEW_ROWS/2)+2, gloryLine, '#ffffff');
   }
   // minimap top-right
@@ -1419,19 +1418,23 @@ function drawHud(){
   drawText(46,y0+1,hw.name,'#888888',BG);
   drawText(46,y0+3,ammoS,'#ffd75e',BG); drawText(46,y0+4,ammoS,'#ffd75e',BG);
   drawText(46,y0+6,(hw.ammoType?hw.ammoType.toUpperCase():'MELEE')+'  BOMBS '+player.bombs+'  DASH '+(player.dashCd<=0?'READY':Math.ceil(player.dashCd)+'s')+(player.weapon===3?'  HOOK '+(hookCd<=0?'READY':Math.ceil(hookCd)+'s'):''),'#c0c0c0',BG);
-  // face (Doom): centre, reacts to health, recent hurt, glory kills
-  let face='🙂';
-  if(state==='dead'||player.hp<=0) face='💀';
-  else if(gloryT>0) face='😈';
-  else if(bobT-hurtBobT<0.5) face='😬';
-  else if(player.hp<25) face='😵';
-  else if(player.hp<50) face='😟';
-  else if(player.hp<75) face='😐';
+  // face (Doom): centre, ASCII eyes + mouth reacting to health,
+  // recent hurt and glory kills — no emoji, they broke the blit
+  let eyes='o o', mouth='___';
+  if(state==='dead'||player.hp<=0){ eyes='X X'; mouth='___'; }
+  else if(gloryT>0){ eyes='^ ^'; mouth='\\_/'; }
+  else if(bobT-hurtBobT<0.5){ eyes='> <'; mouth='~~~'; }
+  else if(player.hp<25){ eyes='x x'; mouth=' o '; }
+  else if(player.hp<50){ eyes='o o'; mouth=' o '; }
+  else if(player.hp<75){ eyes='o o'; mouth=' ~ '; }
   const fx=Math.floor(COLS/2)-3, fy=y0+1;
   drawText(fx,fy,'┌─────┐','#888888',BG);
-  for(let i=1;i<=5;i++) drawText(fx,fy+i,'│     │','#888888',BG);
+  drawText(fx,fy+1,'│     │','#888888',BG);
+  drawText(fx,fy+2,'│ '+eyes+' │','#ffffff',BG);
+  drawText(fx,fy+3,'│  |  │','#888888',BG);
+  drawText(fx,fy+4,'│ '+mouth+' │','#ffffff',BG);
+  drawText(fx,fy+5,'│     │','#888888',BG);
   drawText(fx,fy+6,'└─────┘','#888888',BG);
-  put(fx+3,fy+3,face,'#ffffff',BG);
   // right: score / floor / keys / music
   drawText(100,y0+1,'SCORE','#888888',BG);
   drawText(100,y0+3,String(player.score),'#ffffff',BG); drawText(100,y0+4,String(player.score),'#ffffff',BG);
@@ -1440,7 +1443,7 @@ function drawHud(){
   drawText(122,y0+3,'LV '+player.level+'  LIVES '+player.extraLives+'  GLORY '+player.gloryKills,'#c0c0c0',BG);
   drawText(122,y0+4,'KEYS '+(player.keys&1?'GOLD':'—'),'#ffd75e',BG);
   drawText(122,y0+6,'AMMO B'+player.ammo.bullets+' S'+player.ammo.shells+' R'+player.ammo.rockets+' C'+player.ammo.cells,'#c0c0c0',BG);
-  drawText(150,y0+1,muted?'MUTED':'♪ '+(music.current?music.current.toUpperCase():'—'),'#888888',BG);
+  drawText(150,y0+1,muted?'MUTED':'MUSIC '+(music.current?music.current.toUpperCase():'—'),'#888888',BG);
   drawText(150,y0+3,'SEED '+runSeed,'#888888',BG);
   drawText(150,y0+4,'M mute  P pause','#888888',BG);
   // XP bar along the very bottom edge

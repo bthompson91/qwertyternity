@@ -79,21 +79,21 @@ momentum impulse, not a speed multiplier. Player radius stays Wolf3D's
 The buffer carries a background colour per character, so walls, floor
 and ceiling are shaded per cell, not just black gaps between glyphs.
 Wall tiles use the full Unicode block / box-drawing set and emoji:
-🧱 brick, 🪨 stone, 🪵 wood, 🔩 metal, 🟨 vault, 🚪 sliding doors,
-🗿 pushwalls, alternating with shaded block rows (colour emoji ignore
+ brick,  stone,  wood,  metal,  vault,  sliding doors,
+ pushwalls, alternating with shaded block rows (colour emoji ignore
 fill colour, so the block rows carry the distance shading). Sprites
-have an emoji centre: 🪖 guard, 🎖️ officer, 💀 SS, 🐕 dog, 👹 mutant,
-😈 Hans Grosse, 💊 first aid, 🍗 food, 📦 clip, 🔑 gold key, ✝️ cross,
-🏆 chalice, 📖 bible, 👑 crown, 💰 gold, 💣 bomb, 🛗 elevator exit.
+have an emoji centre:  guard,  officer,  SS,  dog,  mutant,
+ Hans Grosse,  first aid,  food,  clip,  gold key, ✝ cross,
+ chalice,  bible,  crown,  gold,  bomb,  elevator exit.
 
 ## Doom Eternal glory kills
 
 Damage builds a stagger meter. At 50% of an enemy's max HP in one
 stretch (the meter decays when you're not hitting them) the enemy
-staggers for 3 seconds: frozen, defenceless, flashing gold with a 💀
+staggers for 3 seconds: frozen, defenceless, flashing gold with a 
 over its head, and the HUD shows "STAGGERED — press E for GLORY KILL".
 Walk up and press E in melee range to execute: a 0.9s locked animation
-with a big "💀 GLORY KILL 💀" banner and a per-type execution line
+with a big " GLORY KILL " banner and a per-type execution line
 (SNAPPED HIS NECK / HELMET CRUSH / RIBCAGE RIP / SKULL SPLIT /
 PUNTED INTO NEXT WEEK), +15 HP, a food drop at the corpse, +100 bonus
 score on top of the kill, and 1.5s invulnerability — Eternal's
@@ -131,7 +131,7 @@ rocket box +5, cell pack +20. SS enemies drop shells. Starting ammo:
 latches onto the nearest enemy within 12 tiles in your facing cone
 and pulls you to it at 14 tiles/s, dealing 20 damage and setting it
 burning (Flaming Hook mastery: a burning enemy that dies drops +15
-armor). 3s cooldown, 2s if it misses. The chain is drawn as 🔗 cells
+armor). 3s cooldown, 2s if it misses. The chain is drawn as  cells
 across the screen while you're latched.
 
 Deliberate differences from Doom: no rocket self-damage (close
@@ -161,7 +161,7 @@ tab, so music can stutter if you switch away mid-run.
 
 ## Fullscreen + Doom/Wolf HUD
 
-- **Fullscreen:** a ⛶ FULLSCREEN button under the game (or
+- **Fullscreen:** a [ FULLSCREEN ] button under the game (or
   double-click the game, or F11) — when the browser is fullscreen the
   canvas resizes to fill the screen, keeping the game's 1080x600
   aspect (letterboxed) and scaling the character cells with it
@@ -170,10 +170,10 @@ tab, so music can stutter if you switch away mid-run.
   text) hides in fullscreen; touch controls overlay the bottom.
 - **Bottom HUD:** the 3D view now occupies the top 65 rows and the
   bottom 10 rows are a Doom/Wolf3D-style status bar — Doom's face in
-  the middle (🙂 healthy, 😐 hurt, 😟 low, 😵 critical, 😬 just hit,
-  😈 glory kill, 💀 dead), HEALTH and ARMOR with chunky two-row
+  the middle ( healthy,  hurt,  low,  critical,  just hit,
+   glory kill,  dead), HEALTH and ARMOR with chunky two-row
   numerals and bars on the left, weapon + ammo in the middle-left,
   SCORE / KILLS / GOLD / FLOOR / level / lives / glory kills / keys /
-  ammo totals on the right, the current song (♪ COMBAT / BOSS /
+  ammo totals on the right, the current song ( COMBAT / BOSS /
   TITLE) or MUTED, and an XP bar along the very bottom edge. The old
   top-of-screen HUD text is gone.
