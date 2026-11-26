@@ -74,24 +74,24 @@ first 6 tics held, then 123 deg/s walk, 246.1 run. View bob follows
 momentum impulse, not a speed multiplier. Player radius stays Wolf3D's
 0.34 tiles — the maps are Wolfenstein-scale.
 
-## Unicode + emoji art
+## Unicode + ASCII art
 
 The buffer carries a background colour per character, so walls, floor
 and ceiling are shaded per cell, not just black gaps between glyphs.
-Wall tiles use the full Unicode block / box-drawing set and emoji:
+Wall tiles use the full Unicode block / box-drawing set:
  brick,  stone,  wood,  metal,  vault,  sliding doors,
- pushwalls, alternating with shaded block rows (colour emoji ignore
-fill colour, so the block rows carry the distance shading). Sprites
-have an emoji centre:  guard,  officer,  SS,  dog,  mutant,
- Hans Grosse,  first aid,  food,  clip,  gold key, ✝ cross,
- chalice,  bible,  crown,  gold,  bomb,  elevator exit.
+ pushwalls, alternating with shaded block rows (the block rows carry
+the distance shading). Sprites are ASCII art only:  guard,  officer,
+ SS,  dog,  mutant,  Hans Grosse,  first aid,  food,  clip,
+ gold key, ✝ cross,  chalice,  bible,  crown,  gold,  bomb,
+ elevator exit.
 
 ## Doom Eternal glory kills
 
 Damage builds a stagger meter. At 50% of an enemy's max HP in one
 stretch (the meter decays when you're not hitting them) the enemy
-staggers for 3 seconds: frozen, defenceless, flashing gold with a 
-over its head, and the HUD shows "STAGGERED — press E for GLORY KILL".
+staggers for 3 seconds: frozen, defenceless, flashing gold with a
+"!" over its head, and the HUD shows "STAGGERED — press E for GLORY KILL".
 Walk up and press E in melee range to execute: a 0.9s locked animation
 with a big " GLORY KILL " banner and a per-type execution line
 (SNAPPED HIS NECK / HELMET CRUSH / RIBCAGE RIP / SKULL SPLIT /

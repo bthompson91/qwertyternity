@@ -284,7 +284,7 @@ const SPRITES={
  cells:[" CCC ","C C C"," CCC ","  C  ","     "],
  key1:["  K  "," KKK ","  K  ","  K  ","  K  "],
 };
-// Emoji centre for each sprite, drawn over the ASCII art.
+// ASCII art for each sprite, drawn over the shaded tiles.
 // No emoji anywhere in the game: sprites are ASCII art only, and
 // projectiles are single ASCII characters (rocket '*', plasma 'o',
 // BFG '@'). Emoji rendered wider than a cell and ignored fillStyle.
@@ -1024,7 +1024,10 @@ function update(dt){
   // kept at the game's existing feel (Doom's 0.044 deg/mickey is far
   // too slow for a modern mouse).
   const running=keys['ShiftLeft']||keys['ShiftRight'];
-  const turn=(keys['ArrowLeft']?1:0)-(keys['ArrowRight']?1:0);
+  // Screen y grows downward, so increasing ang turns clockwise on
+  // screen (right). ArrowRight must be +1, ArrowLeft -1 — this was
+  // backwards (Left turned right) until 2026-11-27.
+  const turn=(keys['ArrowRight']?1:0)-(keys['ArrowLeft']?1:0);
   if(turn!==0) turnHeld++; else turnHeld=0;
   const turnRate=turnHeld<6?DOOM.TURN_SLOW:(running?DOOM.TURN_RUN:DOOM.TURN_WALK);
   player.ang+=turn*dt*turnRate*Math.PI/180;
