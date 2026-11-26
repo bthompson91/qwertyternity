@@ -27,7 +27,7 @@
 <body>
 <div id="wrap">
 <h1>QWERTY<span>STEIN</span> — dense ASCII raycaster</h1>
-<p class="sub">Procedurally generated castle. Every run is a new seed. Die, and the run is gone. Clear a floor, pick an upgrade, go deeper.</p>
+<p class="sub">Procedurally generated castle. Every run is a new seed. Die, and the run is gone. Clear a floor, pick an upgrade, go deeper. 🧱 brick 🪨 stone 🪵 wood 🔩 metal — Doom movement: momentum, friction, and view bob.</p>
 <canvas id="game" width="1080" height="600"></canvas>
 <div id="touch">
   <div class="pad" id="stick"><span class="lbl">MOVE</span><div class="nub" id="stickNub"></div></div>
@@ -75,6 +75,24 @@ Find the glowing <b>[EXIT]</b> portal on each floor. Kills give XP. Level up: pr
 // ============================================================
 // Wolf3D helpers: US_RndT() is a uniform 0..255 roll.
 function rndT(){ return (Math.random()*256)|0; }
+// --- Doom movement (linuxdoom-1.10: g_game.c G_BuildTiccmd, p_user.c
+// P_MovePlayer/P_Thrust, p_mobj.c P_XYMovement, p_local.h) ---
+// TICRATE 35; forwardmove walk 25 / run 50, sidemove 24 / 40 (per tic);
+// P_Thrust adds forwardmove*2048/65536 = 0.78125 (walk) / 1.5625 (run)
+// map units per tic, strafe 0.75 / 1.25; friction 0.90625 per tic
+// (FRICTION 0xe800); STOPSPEED 0.0625 units; MAXMOVE 30 units/tic.
+// Terminal: walk 8.33 u/tic = 291.7 u/s, run 16.67 = 583.3 u/s.
+// 1 tile = 128 Doom units (MAPBLOCKUNITS), so walk 2.28 tiles/s,
+// run 4.56, strafe walk 2.19 / run 3.65. Keyboard turn: slow 61.5 deg/s
+// for the first 6 tics held, then 123 walk / 246 run. View bob:
+// bob = speed^2 capped at MAXBOB 16 units, 20-tic (0.57s) cycle,
+// amplitude up to +/-8 units.
+const DOOM={
+  TICRATE:35, FRICTION:0.90625, STOPSPEED:0.0625, UNITS_PER_TILE:128,
+  FWD_WALK:0.78125, FWD_RUN:1.5625, STR_WALK:0.75, STR_RUN:1.25,
+  MAXMOVE:30, TURN_SLOW:61.5, TURN_WALK:123, TURN_RUN:246.1,
+  BOB_CYCLE:0.57, BOB_MAX:16,
+};
 const WOLF={
   MAPSIZE:64, MAXDOORS:64, TILEGLOBAL:1, PLAYERSIZE:0.34, MINACTORDIST:1,
   EXTRAPOINTS:40000, PUSHABLETILE:98, EXITTILE:99, ELEVATORTILE:21,
@@ -106,13 +124,13 @@ const THEMES=[
 ];
 // 8x8 ASCII wall tiles, one per wall type (index 1..4)
 const WALL_ART={
- 1:["########","#......#","########","#..##..#","########","#......#","########","#..##..#"], // brick
- 2:["+-+--+-+","| |  | |","+-+--+-+","|  | | |","+-+--+-+","| |  | |","+-+--+-+","|  | | |"], // stone
- 3:["||||||||","||||||||","--------","||||||||","||||||||","--------","||||||||","||||||||"], // wood
- 4:["::::::::","::  ::::","::::::::","::::  ::","::::::::","::  ::::","::::::::","::::  ::"], // metal
- 5:["@@@@@@@@","@  @@  @","@@@@@@@@","@  @@  @","@@@@@@@@","@  @@  @","@@@@@@@@","@  @@  @"], // vault
- 6:["|######|","|######|","|##  ##|","|##  ##|","|######|","|######|","|##  ##|","|######|"], // Wolf3D sliding door (tile 90-101)
- 7:["%%%%%%%%","%  %%  %","%%%%%%%%","%  %%  %","%%%%%%%%","%  %%  %","%%%%%%%%","%  %%  %"], // pushwall (PUSHABLETILE 98)
+ 1:[["🧱","🧱","🧱","🧱","🧱","🧱","🧱","🧱"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🧱","🧱","🧱","🧱","🧱","🧱","🧱","🧱"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🧱","🧱","🧱","🧱","🧱","🧱","🧱","🧱"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🧱","🧱","🧱","🧱","🧱","🧱","🧱","🧱"],["▓","▓","▓","▓","▓","▓","▓","▓"]], // brick
+ 2:[["🪨","🪨","🪨","🪨","🪨","🪨","🪨","🪨"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🪨","🪨","🪨","🪨","🪨","🪨","🪨","🪨"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🪨","🪨","🪨","🪨","🪨","🪨","🪨","🪨"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🪨","🪨","🪨","🪨","🪨","🪨","🪨","🪨"],["▓","▓","▓","▓","▓","▓","▓","▓"]], // stone
+ 3:[["🪵","🪵","🪵","🪵","🪵","🪵","🪵","🪵"],["▌","▌","▌","▌","▌","▌","▌","▌"],["🪵","🪵","🪵","🪵","🪵","🪵","🪵","🪵"],["▌","▌","▌","▌","▌","▌","▌","▌"],["🪵","🪵","🪵","🪵","🪵","🪵","🪵","🪵"],["▌","▌","▌","▌","▌","▌","▌","▌"],["🪵","🪵","🪵","🪵","🪵","🪵","🪵","🪵"],["▌","▌","▌","▌","▌","▌","▌","▌"]], // wood
+ 4:[["🔩","🔩","🔩","🔩","🔩","🔩","🔩","🔩"],["▚","▞","▚","▞","▚","▞","▚","▞"],["🔩","🔩","🔩","🔩","🔩","🔩","🔩","🔩"],["▚","▞","▚","▞","▚","▞","▚","▞"],["🔩","🔩","🔩","🔩","🔩","🔩","🔩","🔩"],["▚","▞","▚","▞","▚","▞","▚","▞"],["🔩","🔩","🔩","🔩","🔩","🔩","🔩","🔩"],["▚","▞","▚","▞","▚","▞","▚","▞"]], // metal
+ 5:[["🟨","🟨","🟨","🟨","🟨","🟨","🟨","🟨"],["█","█","█","█","█","█","█","█"],["🟨","🟨","🟨","🟨","🟨","🟨","🟨","🟨"],["█","█","█","█","█","█","█","█"],["🟨","🟨","🟨","🟨","🟨","🟨","🟨","🟨"],["█","█","█","█","█","█","█","█"],["🟨","🟨","🟨","🟨","🟨","🟨","🟨","🟨"],["█","█","█","█","█","█","█","█"]], // vault — gold blocks
+ 6:[["🚪","🚪","🚪","🚪","🚪","🚪","🚪","🚪"],["▌","█","█","█","█","█","█","▐"],["🚪","🚪","🚪","🚪","🚪","🚪","🚪","🚪"],["▌","█","█","█","█","█","█","▐"],["🚪","🚪","🚪","🚪","🚪","🚪","🚪","🚪"],["▌","█","█","█","█","█","█","▐"],["🚪","🚪","🚪","🚪","🚪","🚪","🚪","🚪"],["▌","█","█","█","█","█","█","▐"]], // Wolf3D sliding door
+ 7:[["🗿","🗿","🗿","🗿","🗿","🗿","🗿","🗿"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🗿","🗿","🗿","🗿","🗿","🗿","🗿","🗿"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🗿","🗿","🗿","🗿","🗿","🗿","🗿","🗿"],["▓","▓","▓","▓","▓","▓","▓","▓"],["🗿","🗿","🗿","🗿","🗿","🗿","🗿","🗿"],["▓","▓","▓","▓","▓","▓","▓","▓"]], // pushwall — a statue that slides
 };
 const SHADE=['#ffffff','#e8e8e8','#c8c8c8','#a0a0a0','#787878','#585858','#383838','#222222'];
 function shadeColor(hex, dist){
@@ -141,7 +159,7 @@ const SPRITES={
  guard:[
  "  ___  ",
  " /   / ",
- "| o o |",
+ "| ◉ ◉ |",
  " |___| ",
  "  | |  ",
  " /| |/ ",
@@ -150,7 +168,7 @@ const SPRITES={
  officer:[
  "  ___  ",
  " /===/ ",
- "| o o |",
+ "| ◉ ◉ |",
  " |___| ",
  "  |#|  ",
  " /| |/ ",
@@ -159,7 +177,7 @@ const SPRITES={
  dog:[
  "       ",
  " /| /| ",
- "( o o )",
+ "( ◉ ◉ )",
  "  >^<  ",
  "  /_/  ",
  " /| |/ ",
@@ -168,7 +186,7 @@ const SPRITES={
  mutant:[
  "  ___  ",
  " / x / ",
- "| X X |",
+ "| ✕ ✕ |",
  " |vvv| ",
  " /| |/ ",
  "  | |  ",
@@ -177,7 +195,7 @@ const SPRITES={
  boss:[
  "  _____ ",
  " / ___ /",
- "| o o o|",
+ "| ◉ ◉ ◉|",
  " |___#| ",
  "  |###| ",
  " /| |/| ",
@@ -192,7 +210,7 @@ const SPRITES={
  ss:[
  "  ___  ",
  " /###/ ",
- "| o o |",
+ "| ◉ ◉ |",
  " |___| ",
  "  |#|  ",
  " /| |/ ",
@@ -206,6 +224,13 @@ const SPRITES={
  food:[" ( ) ","(   )","(   )"," ( ) ","     "],
  clip:[" AAA ","A A A"," AAA ","  A  ","     "],
  key1:["  K  "," KKK ","  K  ","  K  ","  K  "],
+};
+// Emoji centre for each sprite, drawn over the ASCII art.
+const EMOJI={
+ guard:'🪖', officer:'🎖️', ss:'💀', dog:'🐕', mutant:'👹', boss:'😈',
+ health:'💊', firstaid:'💊', food:'🍗', ammo:'📦', clip:'📦',
+ gold:'💰', cross:'✝️', chalice:'🏆', bible:'📖', crown:'👑',
+ key:'🔑', key1:'🔑', bomb:'💣', exit:'🛗',
 };
 // Enemy stats straight from WL_ACT2.C starthitpoints + WL_STATE.C KillActor.
 // Speeds are Wolf3D chase multipliers over SPDPATROL 512 (guard x3,
@@ -263,7 +288,7 @@ let player, grid, mapW, mapH, enemies, items, doors, pushwalls, depth, runSeed, 
 // Wolf3D doorobj_t / PushWall state (WL_ACT1.C): doors slide 0->1, close
 // after OPENTICS; a pushwall slides 2 tiles into the room beyond.
 let levelChoices=[], levelUpPending=0, floorClearPending=false;
-let keys={}, mouseDX=0, firing=false, lastTime=0, flash=0, shake=0, dashTime=0;
+let keys={}, mouseDX=0, firing=false, lastTime=0, flash=0, shake=0, dashTime=0, turnHeld=0, bobT=0, ticAcc=0;
 // touch: virtual stick (move) + look drag. stickVec is -1..1, lookDX accumulates px.
 let stickVec={x:0,y:0}, lookDX=0, choiceSel=0;
 // gamepad: standard mapping, polled every frame. Any standard pad works.
@@ -279,7 +304,7 @@ let zbuf=new Float32Array(COLS);
 function log(m){ logs.unshift(m); logs=logs.slice(0,4); }
 function newRun(){
   runSeed=(Math.random()*1e9)|0;
-  depth=1; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,mags:[Infinity,12,32,6,60],kills:0,score:0,gold:0,dead:false,keys:0,extraLives:0,nextExtra:40000};
+  depth=1; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,mags:[Infinity,12,32,6,60],kills:0,score:0,gold:0,dead:false,keys:0,extraLives:0,nextExtra:40000, momx:0, momy:0};
   for(const w of WEAPONS){ w.ammo = w.key==='1'?Infinity : w.key==='2'?Infinity : w.key==='3'?120 : w.key==='4'?40 : 200; }
   player.mags=[Infinity,12,32,6,60];
   genLevel(1);
@@ -642,19 +667,55 @@ function update(dt){
   // mouse / touch look
   if(mouseDX){ player.ang+=mouseDX*0.0028; mouseDX=0; }
   if(lookDX){ player.ang+=lookDX*0.005; lookDX=0; }
+  // Doom keyboard turning (g_game.c): slow 61.5 deg/s for the first
+  // 6 tics held, then 123 deg/s walk, 246.1 deg/s run. Mouse look is
+  // kept at the game's existing feel (Doom's 0.044 deg/mickey is far
+  // too slow for a modern mouse).
+  const running=keys['ShiftLeft']||keys['ShiftRight'];
   const turn=(keys['ArrowLeft']?1:0)-(keys['ArrowRight']?1:0);
-  player.ang+=turn*dt*2.6;
+  if(turn!==0) turnHeld++; else turnHeld=0;
+  const turnRate=turnHeld<6?DOOM.TURN_SLOW:(running?DOOM.TURN_RUN:DOOM.TURN_WALK);
+  player.ang+=turn*dt*turnRate*Math.PI/180;
   pollPad(dt);
   // movement: WASD, Shift run, Q dash — plus touch stick + gamepad left stick
   let mx=0,my=0;
   if(keys['KeyW'])my+=1; if(keys['KeyS'])my-=1; if(keys['KeyA'])mx-=1; if(keys['KeyD'])mx+=1;
   mx+=stickVec.x+padMove.x; my+=-stickVec.y-padMove.y;
   if(mx>1)mx=1; if(mx<-1)mx=-1; if(my>1)my=1; if(my<-1)my=-1;
-  if(keys['KeyQ']&&player.dashCd<=0){ player.dashCd=player.dashCdMax; dashTime=0.22; beep(500,0.1,'sine',0.05); }
-  let sp=3.4*player.speedMul*(keys['ShiftLeft']||keys['ShiftRight']?1.5:1)*(dashTime>0?2.6:1);
+  // --- Doom movement (p_user.c P_MovePlayer/P_Thrust, p_mobj.c
+  // P_XYMovement): thrust adds momentum, friction 0.90625 per tic
+  // decays it, hard stop below STOPSPEED. Terminal: walk 2.28
+  // tiles/s, run 4.56, strafe 2.19 / 3.65 — Doom is slower on paper
+  // than the old 3.4/5.1, but it ramps (50% speed in 0.2s, 90% in
+  // 0.67s) and slides ~1.26 tiles after a run stop. Dash is a
+  // momentum impulse in the facing direction, not a speed multiplier.
+  const accF=(running?DOOM.FWD_RUN:DOOM.FWD_WALK)*DOOM.TICRATE*DOOM.TICRATE/DOOM.UNITS_PER_TILE*player.speedMul;
+  const accS=(running?DOOM.STR_RUN:DOOM.STR_WALK)*DOOM.TICRATE*DOOM.TICRATE/DOOM.UNITS_PER_TILE*player.speedMul;
   const ca=Math.cos(player.ang), sa=Math.sin(player.ang);
-  const vx=(ca*my - sa*mx)*sp*dt, vy=(sa*my + ca*mx)*sp*dt;
-  movePlayer(vx,vy);
+  // Fixed 35 Hz tics, exactly like Doom (P_Ticker): thrust, then move,
+  // then friction 0.90625, once per tic. The continuous version ran
+  // 8% slow (4.21 vs 4.56 tiles/s); discrete tics hit Doom's numbers
+  // exactly: terminal mom = thrust/(1-friction) = 8.33 u/tic walk.
+  ticAcc+=dt;
+  const step=1/DOOM.TICRATE;
+  while(ticAcc>=step){
+    ticAcc-=step;
+    player.momx+=(ca*my*accF - sa*mx*accS)*step;
+    player.momy+=(sa*my*accF + ca*mx*accS)*step;
+    // Doom order (P_Ticker): thrust, then MOVE, then friction.
+    // Moving before friction is what makes the terminal *speed*
+    // 2.28/4.56 tiles/s: displacement per tic is the post-thrust
+    // momentum (stored mom + one more thrust), not the stored mom.
+    movePlayer(player.momx*step, player.momy*step);
+    player.momx*=DOOM.FRICTION; player.momy*=DOOM.FRICTION;
+    const stopV=DOOM.STOPSPEED*DOOM.TICRATE/DOOM.UNITS_PER_TILE;
+    if(mx===0&&my===0&&Math.abs(player.momx)<stopV&&Math.abs(player.momy)<stopV){ player.momx=0; player.momy=0; }
+    const maxV=DOOM.MAXMOVE*DOOM.TICRATE/DOOM.UNITS_PER_TILE;
+    player.momx=Math.max(-maxV,Math.min(maxV,player.momx));
+    player.momy=Math.max(-maxV,Math.min(maxV,player.momy));
+  }
+  if(keys['KeyQ']&&player.dashCd<=0){ player.dashCd=player.dashCdMax; dashTime=0.22; player.momx+=ca*6; player.momy+=sa*6; beep(500,0.1,'sine',0.05); }
+  bobT+=dt;
   if(keys['Space']||firing) tryShoot();
   if(keys['KeyT']){ keys['KeyT']=false; throwBomb(); }
   if(keys['KeyR']){ keys['KeyR']=false; startReload(); }
@@ -800,12 +861,18 @@ function floorComplete(){
   floorClearPending=true; offerChoices(3); state='floorclear'; log('FLOOR '+depth+' CLEAR — elevator. Pick an upgrade, then descend');
 }
 // --- rendering: dense ASCII buffer ---
-let buf=[], col=[];
-function clearBuf(ch,c){ buf=[]; col=[]; for(let y=0;y<ROWS;y++){ buf.push(new Array(COLS).fill(ch)); col.push(new Array(COLS).fill(c)); } }
-function put(x,y,ch,c){ if(x<0||y<0||x>=COLS||y>=ROWS) return; buf[y][x]=ch; col[y][x]=c; }
-function drawText(x,y,s,c){ for(let i=0;i<s.length;i++) put(x+i,y,s[i],c); }
+let buf=[], col=[], bg=[];
+function clearBuf(ch,c){ buf=[]; col=[]; bg=[]; for(let y=0;y<ROWS;y++){ buf.push(new Array(COLS).fill(ch)); col.push(new Array(COLS).fill(c)); bg.push(new Array(COLS).fill('#000000')); } }
+function put(x,y,ch,c,b){ if(x<0||y<0||x>=COLS||y>=ROWS||ch===undefined) return; buf[y][x]=ch; col[y][x]=c; if(b!==undefined) bg[y][x]=b; }
+function drawText(x,y,s,c,b){ for(let i=0;i<s.length;i++) put(x+i,y,s[i],c,b===undefined?'#000000':b); }
 function render(){
   clearBuf(' ','#888');
+  // Doom view bob (p_user.c P_CalcHeight): bob = speed^2 capped at
+  // MAXBOB 16 units, 0.57s cycle, up to +/-8 units -> horizon shift.
+  const spd=Math.hypot(player.momx||0, player.momy||0);
+  const momT=spd*DOOM.UNITS_PER_TILE/DOOM.TICRATE; // momentum, units/tic
+  const bobU=Math.min(DOOM.BOB_MAX, momT*momT/4)/2; // bob/2, units, max 8
+  const bobRows=Math.sin(bobT*2*Math.PI/DOOM.BOB_CYCLE)*bobU/41*(ROWS/2);
   const horizon=ROWS>>1;
   const fov=Math.PI/3;
   // walls + floor/ceiling per column
@@ -821,27 +888,29 @@ function render(){
     const baseCol=theme.wall[(r.type-1)%theme.wall.length];
     for(let y=0;y<ROWS;y++){
       if(y<top){
-        // ceiling: sparse dots, darker with height
-        const ch=y%3===0?'.':' ';
-        put(x,y,ch, shadeColor(theme.ceil, 2));
+        // ceiling: Unicode dots on a coloured background
+        const ch=y%3===0?'·':(y%3===1?'°':' ');
+        put(x,y,ch, shadeColor(theme.ceil, 1), shadeColor(theme.ceil, 4));
       } else if(y>=bot){
-        // floor: dense gradient by row distance
+        // floor: block-density gradient by row distance, coloured bg
         const fd=(y-horizon)/Math.max(1,(ROWS-horizon));
-        const ch=fd<0.25?'#':fd<0.5?'+':fd<0.75?':':'.';
-        put(x,y,ch, shadeColor(theme.floor, 1+fd*4));
+        const ch=fd<0.25?'▓':fd<0.5?'▒':fd<0.75?'░':'·';
+        put(x,y,ch, shadeColor(theme.floor, 1+fd*4), shadeColor(theme.floor, 3+fd*4));
       } else {
         const texY=Math.min(7,Math.floor((y-top)/Math.max(1,wallH)*8));
         const ch=art[texY][texX];
         let c=shadeColor(baseCol, dist);
         if(r.side===1) c=shadeColor(baseCol, dist+1.5);
-        put(x,y,ch,c);
+        // wall: foreground glyph + a darker shade of the same colour
+        // as its background, per character
+        put(x,y,ch,c, shadeColor(baseCol, dist+3));
       }
     }
   }
   // sprites: items + enemies, far to near, with z-buffer
   const sprs=[];
-  for(const it of items) if(!it.taken&&SPRITES[it.kind]) sprs.push({x:it.x,y:it.y,art:SPRITES[it.kind],color:it.kind==='exit'?'#7ee081':(it.kind==='firstaid'||it.kind==='food')?'#ff7070':(it.kind==='cross'||it.kind==='chalice'||it.kind==='bible'||it.kind==='crown'||it.kind==='key1')?'#ffd75e':'#c0c0c0',scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
-  for(const e of enemies) if(!e.dead){ const b=ENEMY_TYPES[e.type]; sprs.push({x:e.x,y:e.y,art:SPRITES[b.spr],color:e.flash>0?'#ffffff':b.color,scale:e.type==='boss'?1.6:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e)}); }
+  for(const it of items) if(!it.taken&&SPRITES[it.kind]) sprs.push({x:it.x,y:it.y,art:SPRITES[it.kind],emo:EMOJI[it.kind],color:it.kind==='exit'?'#7ee081':(it.kind==='firstaid'||it.kind==='food')?'#ff7070':(it.kind==='cross'||it.kind==='chalice'||it.kind==='bible'||it.kind==='crown'||it.kind==='key1')?'#ffd75e':'#c0c0c0',scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
+  for(const e of enemies) if(!e.dead){ const b=ENEMY_TYPES[e.type]; sprs.push({x:e.x,y:e.y,art:SPRITES[b.spr],emo:EMOJI[b.spr],color:e.flash>0?'#ffffff':b.color,scale:e.type==='boss'?1.6:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e)}); }
   sprs.sort((a,b)=>b.dist-a.dist);
   for(const s of sprs){
     const dx=s.x-player.x, dy=s.y-player.y, d=s.dist;
@@ -863,14 +932,16 @@ function render(){
         put(cx, top+sy, ch, shadeColor(s.color, d*0.7));
       }
     }
+    if(s.emo) put(sx, top+(h>>1), s.emo, '#ffffff');
     if(s.hp!==undefined){
       const bw=7, bx=sx-(bw>>1), by=top-1;
-      for(let i=0;i<bw;i++) put(bx+i,by, i/bw<s.hp?'#':'-','#ff6060');
+      for(let i=0;i<bw;i++) put(bx+i,by, i/bw<s.hp?'█':'░','#ff6060');
     }
   }
   // weapon (bottom centre, drawn 2x so it stays chunky at 180 cols) + muzzle flash
   const wArt=WEAPON_ART[player.weapon];
-  const wx=Math.floor(COLS/2)-8, wy=ROWS-wArt.length*2-1;
+  const wBob=Math.round(Math.sin(bobT*2*Math.PI/1.83)*bobU/41*(ROWS/2)*0.5);
+  const wx=Math.floor(COLS/2)-8, wy=ROWS-wArt.length*2-1+wBob;
   for(let y=0;y<wArt.length;y++) for(let x=0;x<wArt[y].length;x++){ const ch=wArt[y][x]; if(ch!==' ') { put(wx+x*2,wy+y*2,ch, flash>0?'#ffd75e':'#c8c8c8'); put(wx+x*2+1,wy+y*2,ch, flash>0?'#ffd75e':'#c8c8c8'); put(wx+x*2,wy+y*2+1,ch, flash>0?'#ffd75e':'#c8c8c8'); put(wx+x*2+1,wy+y*2+1,ch, flash>0?'#ffd75e':'#c8c8c8'); } }
   if(flash>0){ put(Math.floor(COLS/2), wy-1, '*', '#ffffff'); put(Math.floor(COLS/2)+1, wy-1, '*', '#ffd75e'); put(Math.floor(COLS/2), wy-2, '*', '#ffd75e'); put(Math.floor(COLS/2)-1, wy-1, '*', '#ffd75e'); }
   // HUD
@@ -882,7 +953,7 @@ function render(){
   if(padName) drawText(COLS-28,0,'PAD: '+padName.slice(0,22), '#7ee081');
   // XP bar
   const xpW=Math.floor(COLS*0.3), xpF=Math.floor(xpW*player.xp/player.xpNext);
-  for(let i=0;i<xpW;i++) put(i,3, i<xpF?'=':'-', '#7ee081');
+  for(let i=0;i<xpW;i++) put(i,3, i<xpF?'█':'░', '#7ee081', '#000000');
   // minimap top-right
   const mw=28, mh=28, ox=COLS-mw-1, oy=5;
   for(let my=0;my<mh;my++) for(let mx=0;mx<mw;mx++){
@@ -899,18 +970,25 @@ function render(){
   if(state==='levelup'||state==='floorclear') overlayChoices();
   if(state==='dead') overlayDead();
   if(state==='paused') overlayText('PAUSED — press P to resume', '#ffd75e');
-  // blit buffer to canvas, run-length: one fillText per run of same colour.
-  // At 180x75 (13,500 cells) per-cell drawing would be ~13k text calls/frame;
-  // runs collapse floor/ceiling/wall spans to a few hundred calls instead.
+  // blit buffer to canvas, run-length: one fillText per run of the
+  // same foreground+background pair, with a fillRect for the run's
+  // background colour. At 180x75 (13,500 cells) per-cell drawing
+  // would be ~13k text calls/frame; runs collapse floor/ceiling/
+  // wall spans to a few hundred calls instead.
   ctx.fillStyle='#000'; ctx.fillRect(0,0,cv.width,cv.height);
-  const ox2=shake>0?rr(-shake,shake)*2:0, oy2=shake>0?rr(-shake,shake)*2:0;
+  const ox2=shake>0?rr(-shake,shake)*2:0, oy2=(shake>0?rr(-shake,shake)*2:0)+Math.round(bobRows*CH);
   for(let y=0;y<ROWS;y++){
-    let runCol=col[y][0], runStr=buf[y][0], runX=0;
+    let runCol=col[y][0], runBg=bg[y][0], runStr=buf[y][0]===undefined?' ':buf[y][0], runX=0;
     for(let x=1;x<=COLS;x++){
-      if(x===COLS||col[y][x]!==runCol){
-        if(runStr.trim()){ ctx.fillStyle=runCol; ctx.fillText(runStr, runX*CW+ox2, y*CH+oy2); }
-        if(x<COLS){ runCol=col[y][x]; runStr=buf[y][x]; runX=x; }
-      } else runStr+=buf[y][x];
+      if(x===COLS||col[y][x]!==runCol||bg[y][x]!==runBg){
+        if(runStr.trim()){
+          if(runBg!=='#000000'){ ctx.fillStyle=runBg; ctx.fillRect(runX*CW+ox2, y*CH+oy2, (x-runX)*CW, CH); }
+          ctx.fillStyle=runCol; ctx.fillText(runStr, runX*CW+ox2, y*CH+oy2);
+        } else if(runBg!=='#000000'){
+          ctx.fillStyle=runBg; ctx.fillRect(runX*CW+ox2, y*CH+oy2, (x-runX)*CW, CH);
+        }
+        if(x<COLS){ runCol=col[y][x]; runBg=bg[y][x]; runStr=buf[y][x]===undefined?' ':buf[y][x]; runX=x; }
+      } else runStr+=buf[y][x]===undefined?' ':buf[y][x];
     }
   }
 }

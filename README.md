@@ -58,3 +58,30 @@ Ported, with file references in the code:
 - **Scoring / pickups** (`WL_AGENT.C`): treasure cross 100, chalice 500, bible 1000, crown 5000; first aid +25, food +10, clip +8 (cap 99); every 40,000 points (`EXTRAPOINTS`) grants an extra life, which revives you at 50 HP.
 
 Deliberate differences from Wolf3D: levels are procedurally generated instead of hand-made, runs are roguelike (permadeath, XP levels, upgrade picks between floors), and the screen is dense ASCII instead of textured walls. The chaingun/SMG fire faster than Wolf3D's 24-tic shots — that's the roguelike talking.
+
+## Doom movement (linuxdoom-1.10)
+
+Movement is Doom's, ported from the real source (`id-Software/DOOM`,
+`g_game.c` / `p_user.c` / `p_mobj.c` / `p_local.h`), with 1 tile = 128
+Doom units. Fixed 35 Hz tics: thrust, then move, then friction 0.90625
+per tic, hard stop below STOPSPEED. Terminal speeds: walk 2.28 tiles/s,
+run 4.56, strafe 2.19 / 3.65. It ramps (50% in 0.2s, 90% in 0.67s) and
+slides ~1.26 tiles after a run stop, instead of the old instant
+3.4 / 5.1 tiles/s. Keyboard turning is Doom's too: 61.5 deg/s for the
+first 6 tics held, then 123 deg/s walk, 246.1 run. View bob follows
+`P_CalcHeight` (speed^2 capped at MAXBOB 16 units, 0.57s cycle, up to
++/-8 units); weapon bob on the 1.83s `A_WeaponReady` cycle. Dash is a
+momentum impulse, not a speed multiplier. Player radius stays Wolf3D's
+0.34 tiles — the maps are Wolfenstein-scale.
+
+## Unicode + emoji art
+
+The buffer carries a background colour per character, so walls, floor
+and ceiling are shaded per cell, not just black gaps between glyphs.
+Wall tiles use the full Unicode block / box-drawing set and emoji:
+🧱 brick, 🪨 stone, 🪵 wood, 🔩 metal, 🟨 vault, 🚪 sliding doors,
+🗿 pushwalls, alternating with shaded block rows (colour emoji ignore
+fill colour, so the block rows carry the distance shading). Sprites
+have an emoji centre: 🪖 guard, 🎖️ officer, 💀 SS, 🐕 dog, 👹 mutant,
+😈 Hans Grosse, 💊 first aid, 🍗 food, 📦 clip, 🔑 gold key, ✝️ cross,
+🏆 chalice, 📖 bible, 👑 crown, 💰 gold, 💣 bomb, 🛗 elevator exit.
