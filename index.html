@@ -1382,14 +1382,17 @@ function render(){
   ctx.fillStyle='#000'; ctx.fillRect(0,0,cv.width,cv.height);
   const ox2=shake>0?rr(-shake,shake)*2:0, oy2=(shake>0?rr(-shake,shake)*2:0)+Math.round(bobRows*CH);
   for(let y=0;y<ROWS;y++){
+    // view bob + damage shake move only the 3D view — the HUD bar
+    // is a Doom status bar, it stays bolted to the bottom of the screen
+    const rox=y<VIEW_ROWS?ox2:0, roy=y<VIEW_ROWS?oy2:0;
     let runCol=col[y][0], runBg=bg[y][0], runStr=buf[y][0]===undefined?' ':buf[y][0], runX=0;
     for(let x=1;x<=COLS;x++){
       if(x===COLS||col[y][x]!==runCol||bg[y][x]!==runBg){
         if(runStr.trim()){
-          if(runBg!=='#000000'){ ctx.fillStyle=runBg; ctx.fillRect(runX*CW+ox2, y*CH+oy2, (x-runX)*CW, CH); }
-          ctx.fillStyle=runCol; ctx.fillText(runStr, runX*CW+ox2, y*CH+oy2);
+          if(runBg!=='#000000'){ ctx.fillStyle=runBg; ctx.fillRect(runX*CW+rox, y*CH+roy, (x-runX)*CW, CH); }
+          ctx.fillStyle=runCol; ctx.fillText(runStr, runX*CW+rox, y*CH+roy);
         } else if(runBg!=='#000000'){
-          ctx.fillStyle=runBg; ctx.fillRect(runX*CW+ox2, y*CH+oy2, (x-runX)*CW, CH);
+          ctx.fillStyle=runBg; ctx.fillRect(runX*CW+rox, y*CH+roy, (x-runX)*CW, CH);
         }
         if(x<COLS){ runCol=col[y][x]; runBg=bg[y][x]; runStr=buf[y][x]===undefined?' ':buf[y][x]; runX=x; }
       } else runStr+=buf[y][x]===undefined?' ':buf[y][x];
