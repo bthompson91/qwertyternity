@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QWERTYSTEIN — dense ASCII raycaster</title>
+<style>
+  html,body{margin:0;padding:0;background:#050505;color:#d8d8c8;font-family:ui-monospace,Menlo,Consolas,monospace}
+  #wrap{max-width:1060px;margin:0 auto;padding:10px}
+  h1{font-size:18px;letter-spacing:3px;margin:6px 0 2px;color:#ffd75e}
+  h1 span{color:#7ee081}
+  p.sub{margin:0 0 8px;color:#888;font-size:13px}
+  #game{display:block;width:100%;height:auto;background:#000;border:2px solid #444;cursor:crosshair;image-rendering:pixelated}
+  #keys{font-size:12px;color:#aaa;line-height:1.7;margin-top:8px;white-space:pre-wrap}
+  #keys b{color:#ffd75e}
+  #touch{display:none;gap:8px;margin-top:8px;flex-wrap:wrap}
+  #touch button{background:#222;color:#eee;border:1px solid #555;padding:12px 16px;font:inherit;font-size:16px}
+  @media (pointer:coarse){#touch{display:flex}}
+</style>
+</head>
+<body>
+<div id="wrap">
+<h1>QWERTY<span>STEIN</span> — dense ASCII raycaster</h1>
+<p class="sub">Procedurally generated castle. Every run is a new seed. Die, and the run is gone. Clear a floor, pick an upgrade, go deeper.</p>
+<canvas id="game" width="1040" height="588"></canvas>
+<div id="touch">
+  <button data-k="KeyW">▲</button><button data-k="KeyA">◀</button><button data-k="KeyS">▼</button><button data-k="KeyD">▶</button>
+  <button data-k="ArrowLeft">⟲</button><button data-k="ArrowRight">⟳</button>
+  <button data-k="Space">FIRE</button><button data-k="KeyQ">DASH</button><button data-k="KeyT">BOMB</button>
+</div>
+<pre id="keys"><b>WASD</b> move &nbsp; <b>Mouse</b> look (click to lock) &nbsp; <b>← →</b> turn &nbsp; <b>Click / Space</b> shoot
+<b>1-5</b> weapons: 1 Knife  2 Pistol  3 SMG  4 Shotgun  5 Chaingun &nbsp; <b>R</b> reload &nbsp; <b>Shift</b> run
+<b>Q</b> dash &nbsp; <b>T</b> throw bomb &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>N</b> new run (on death)
+<b>QWERTY tip:</b> strafe with <b>Q/E</b>? No — Q is dash, E is nothing. Strafe is A/D while turning with the mouse. That's the QWERTYSTEIN way.
+Find the glowing <b>[EXIT]</b> portal on each floor. Kills give XP. Level up: press <b>1 / 2 / 3</b> to pick an upgrade.</pre>
+</div>
+<script>
+'use strict';
+// ============ QWERTYSTEIN ============
+// Dense ASCII raycaster. No build step, no assets, no libraries.
+// One canvas, one character cell per ray column slice, wall textures
+// drawn as 8x8 ASCII tiles, sprites as ASCII billboards.
+// ============================================================
+const COLS=104, ROWS=42, CW=10, CH=14;
+const cv=document.getElementById('game'), ctx=cv.getContext('2d');
+ctx.font='bold 13px ui-monospace, Menlo, Consolas, monospace';
+ctx.textBaseline='top';
+// --- RNG (mulberry32, seeded per run / per floor) ---
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let rng=mulberry32(1337);
+function rr(a,b){return a+rng()*(b-a)}
+function ri(a,b){return Math.floor(rr(a,b+1))}
+function pick(arr){return arr[Math.floor(rng()*arr.length)]}
+function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
+// --- themes, one per floor cycle ---
+const THEMES=[
+ {name:'CASTLE', wall:['#b89a5e','#8a8a8a','#7a5a34','#9aa0a8'], floor:'#5a4632', ceil:'#1c1c26', fog:'#0a0a0a'},
+ {name:'CRYPT',  wall:['#6a8a6a','#5a6a7a','#4a5a4a','#7a7a6a'], floor:'#2e3a2e', ceil:'#101018', fog:'#050805'},
+ {name:'BUNKER', wall:['#8a7a5a','#6a6a6a','#5a4a3a','#8a8a7a'], floor:'#3a342a', ceil:'#181818', fog:'#080808'},
+ {name:'VAULT',  wall:['#a08a4a','#7a7a8a','#8a5a3a','#9a8a5a'], floor:'#3a2e1e', ceil:'#14141e', fog:'#0a0805'},
+];
+// 8x8 ASCII wall tiles, one per wall type (index 1..4)
+const WALL_ART={
+ 1:["########","#......#","########","#..##..#","########","#......#","########","#..##..#"], // brick
+ 2:["+-+--+-+","| |  | |","+-+--+-+","|  | | |","+-+--+-+","| |  | |","+-+--+-+","|  | | |"], // stone
+ 3:["||||||||","||||||||","--------","||||||||","||||||||","--------","||||||||","||||||||"], // wood
+ 4:["::::::::","::  ::::","::::::::","::::  ::","::::::::","::  ::::","::::::::","::::  ::"], // metal
+ 5:["@@@@@@@@","@  @@  @","@@@@@@@@","@  @@  @","@@@@@@@@","@  @@  @","@@@@@@@@","@  @@  @"], // vault
+};
+const SHADE=['#ffffff','#e8e8e8','#c8c8c8','#a0a0a0','#787878','#585858','#383838','#222222'];
+function shadeColor(hex, dist){
+  // darken a hex colour by distance; returns rgb string
+  const n=parseInt(hex.slice(1),16), r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+  const f=Math.max(0.12, 1-dist/11);
+  return 'rgb('+Math.floor(r*f)+','+Math.floor(g*f)+','+Math.floor(b*f)+')';
+}
+// --- weapons ---
+const WEAPONS=[
+ {name:'KNIFE',    key:'1', dmg:34, rate:0.38, range:1.6, spread:0,    pellets:1, ammo:Infinity, mag:Infinity, auto:false, kick:0},
+ {name:'PISTOL',   key:'2', dmg:22, rate:0.34, range:14,  spread:0.02, pellets:1, ammo:Infinity, mag:12, auto:false, kick:1},
+ {name:'SMG',      key:'3', dmg:13, rate:0.09, range:12,  spread:0.09, pellets:1, ammo:120, mag:32, auto:true,  kick:1},
+ {name:'SHOTGUN',  key:'4', dmg:11, rate:0.95, range:9,   spread:0.14, pellets:6, ammo:40,  mag:6,  auto:false, kick:3},
+ {name:'CHAINGUN', key:'5', dmg:15, rate:0.06, range:16,  spread:0.07, pellets:1, ammo:200, mag:60, auto:true,  kick:1},
+];
+const WEAPON_ART=[
+ ["        ","   ||   ","   ||   ","  /||/  ","  |  |  ","        "],
+ ["        ","    __  ","   /  | ","  |===| ","  |   | ","        "],
+ ["        ","  _____ "," |=====|","  | | | ","  | | | ","        "],
+ ["        ","  ______"," |=======","  | | | ","  | | | ","        "],
+ ["        ","  _|_|_ "," |=====|"," |=====|","  | | | ","        "],
+];
+// --- enemy ASCII sprites (7 wide, 8 tall, ' ' = transparent) ---
+const SPRITES={
+ guard:[
+ "  ___  ",
+ " /   / ",
+ "| o o |",
+ " |___| ",
+ "  | |  ",
+ " /| |/ ",
+ "  | |  ",
+ " _| |_ "],
+ officer:[
+ "  ___  ",
+ " /===/ ",
+ "| o o |",
+ " |___| ",
+ "  |#|  ",
+ " /| |/ ",
+ "  | |  ",
+ " _| |_ "],
+ dog:[
+ "       ",
+ " /| /| ",
+ "( o o )",
+ "  >^<  ",
+ "  /_/  ",
+ " /| |/ ",
+ "  | |  ",
+ "       "],
+ mutant:[
+ "  ___  ",
+ " / x / ",
+ "| X X |",
+ " |vvv| ",
+ " /| |/ ",
+ "  | |  ",
+ " /| |/ ",
+ " _| |_ "],
+ boss:[
+ "  _____ ",
+ " / ___ /",
+ "| o o o|",
+ " |___#| ",
+ "  |###| ",
+ " /| |/| ",
+ "  | | | ",
+ " _| | |_"],
+ health:["  +  "," +++ ","+++++"," +++ ","  +  "],
+ ammo:[" AAA ","A A A"," AAA ","  A  ","     "],
+ gold:["  $  "," $$$ ","$$$$$"," $$$ ","  $  "],
+ bomb:["  O  "," OOO ","OOOOO"," OOO ","  O  "],
+ exit:[" [ ] ","[   ]","[ E ]","[   ]"," [ ] "],
+ key:["  K  "," KKK ","  K  ","  K  ","  K  "],
+};
+const ENEMY_TYPES={
+ guard:  {hp:30, dmg:7,  speed:1.1, range:7, xp:10, score:100, color:'#d8b060', spr:'guard',   fire:1.6},
+ dog:    {hp:20, dmg:6,  speed:2.3, range:1.4, xp:12, score:150, color:'#c09070', spr:'dog',   fire:0.9},
+ officer:{hp:55, dmg:12, speed:1.5, range:8, xp:20, score:250, color:'#a0c0e0', spr:'officer', fire:1.3},
+ mutant: {hp:90, dmg:16, speed:1.0, range:6, xp:30, score:400, color:'#80d080', spr:'mutant', fire:1.8},
+ boss:   {hp:260,dmg:20, speed:1.3, range:9, xp:100,score:1500,color:'#e06060', spr:'boss',   fire:1.1},
+};
+// --- roguelike upgrades (offered 3 at a time on level-up and floor clear) ---
+const UPGRADES=[
+ {id:'hp',    name:'IRON GUT',    desc:'+25 max HP, heal 25'},
+ {id:'dmg',   name:'HOT LOADS',   desc:'+20% damage'},
+ {id:'rate',  name:'TRIGGER FINGER', desc:'+15% fire rate'},
+ {id:'speed', name:'LIGHT BOOTS', desc:'+12% move speed'},
+ {id:'armor', name:'FLAK VEST',   desc:'+25 armor'},
+ {id:'life',  name:'VAMPIRE',     desc:'Heal 8% of damage dealt'},
+ {id:'ammo',  name:'DEEP POCKETS',desc:'+60 reserve ammo, all guns'},
+ {id:'xp',    name:'FAST LEARNER',desc:'+30% XP'},
+ {id:'crit',  name:'DEADEYE',     desc:'+12% crit chance (2x dmg)'},
+ {id:'bomb',  name:'BOMB BAG',    desc:'+2 bombs, +1 max'},
+ {id:'dash',  name:'GHOST DASH',  desc:'Dash recharges 40% faster'},
+ {id:'regen', name:'SECOND WIND', desc:'Regenerate 1 HP / sec'},
+];
+function applyUpgrade(u){
+  const p=player;
+  if(u.id==='hp'){p.maxHp+=25;p.hp=Math.min(p.maxHp,p.hp+25)}
+  if(u.id==='dmg'){p.dmgMul*=1.20}
+  if(u.id==='rate'){p.rateMul*=0.85}
+  if(u.id==='speed'){p.speedMul*=1.12}
+  if(u.id==='armor'){p.armor=Math.min(100,p.armor+25)}
+  if(u.id==='life'){p.lifesteal+=0.08}
+  if(u.id==='ammo'){for(const w of WEAPONS) if(isFinite(w.ammo)) w.ammo+=60; p.ammoReserve+=60}
+  if(u.id==='xp'){p.xpMul*=1.30}
+  if(u.id==='crit'){p.crit+=0.12}
+  if(u.id==='bomb'){p.bombs+=2;p.maxBombs+=1}
+  if(u.id==='dash'){p.dashCdMax*=0.6}
+  if(u.id==='regen'){p.regen+=1}
+  log('UPGRADE: '+u.name+' — '+u.desc);
+}
+// --- audio: tiny WebAudio bleeps, no assets ---
+let AC=null, muted=false;
+function beep(f,d,type,g){ if(muted) return; try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(), gn=AC.createGain(); o.type=type||'square'; o.frequency.value=f; gn.gain.value=g||0.05; o.connect(gn); gn.connect(AC.destination); o.start(); gn.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime+d); o.stop(AC.currentTime+d);}catch(e){} }
+function sfx(n){ if(n==='shoot')beep(180,0.08,'square',0.06); if(n==='shotgun')beep(90,0.18,'sawtooth',0.09); if(n==='hit')beep(320,0.05,'square',0.04); if(n==='hurt')beep(70,0.2,'sawtooth',0.09); if(n==='pickup')beep(660,0.09,'sine',0.06); if(n==='level') {beep(523,0.1,'sine',0.06); setTimeout(()=>beep(784,0.15,'sine',0.06),90);} if(n==='die')beep(50,0.4,'sawtooth',0.08); if(n==='exit') {beep(440,0.1,'sine',0.06); setTimeout(()=>beep(660,0.1,'sine',0.06),100); setTimeout(()=>beep(880,0.2,'sine',0.06),200);} }
+// --- game state ---
+let state='title'; // title | play | levelup | floorclear | dead | paused
+let player, grid, mapW, mapH, enemies, items, depth, runSeed, theme, logs=[];
+let levelChoices=[], levelUpPending=0, floorClearPending=false;
+let keys={}, mouseDX=0, firing=false, lastTime=0, flash=0, shake=0, dashTime=0;
+let zbuf=new Float32Array(COLS);
+function log(m){ logs.unshift(m); logs=logs.slice(0,4); }
+function newRun(){
+  runSeed=(Math.random()*1e9)|0;
+  depth=1; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,mags:[Infinity,12,32,6,60],kills:0,score:0,gold:0,dead:false};
+  for(const w of WEAPONS){ w.ammo = w.key==='1'?Infinity : w.key==='2'?Infinity : w.key==='3'?120 : w.key==='4'?40 : 200; }
+  player.mags=[Infinity,12,32,6,60];
+  genLevel(1);
+  state='play'; log('RUN #'+runSeed+' — floor 1, '+theme.name);
+}
+function genLevel(d){
+  depth=d; theme=THEMES[(d-1)%THEMES.length];
+  rng=mulberry32(runSeed + d*7919);
+  mapW=36; mapH=36;
+  grid=[]; for(let y=0;y<mapH;y++){ grid.push(new Array(mapW).fill(1)); }
+  // rooms
+  const rooms=[];
+  for(let tries=0; tries<120 && rooms.length<10; tries++){
+    const w=ri(4,9), h=ri(4,7), x=ri(1,mapW-w-1), y=ri(1,mapH-h-1);
+    let ok=true;
+    for(const r of rooms) if(x<r.x+r.w+1 && x+w+1>r.x && y<r.y+r.h+1 && y+h+1>r.y){ ok=false; break; }
+    if(!ok) continue;
+    rooms.push({x,y,w,h,cx:x+(w>>1), cy:y+(h>>1)});
+    for(let yy=y;yy<y+h;yy++) for(let xx=x;xx<x+w;xx++) grid[yy][xx]=0;
+  }
+  // corridors: connect room centres in order, plus a couple of loops
+  function corridor(x0,y0,x1,y1){
+    let x=x0,y=y0;
+    while(x!==x1){ grid[y][x]=0; x+=Math.sign(x1-x); }
+    while(y!==y1){ grid[y][x]=0; y+=Math.sign(y1-y); }
+    grid[y][x]=0;
+  }
+  for(let i=1;i<rooms.length;i++) corridor(rooms[i-1].cx,rooms[i-1].cy,rooms[i].cx,rooms[i].cy);
+  corridor(rooms[0].cx,rooms[0].cy,rooms[rooms.length-1].cx,rooms[rooms.length-1].cy);
+  // wall types: carve walls get a type by position hash so textures vary
+  for(let y=0;y<mapH;y++) for(let x=0;x<mapW;x++) if(grid[y][x]===1){
+    grid[y][x]=1+((x*7+y*13+d)%4); // 1..4, vault on deep floors
+    if(d>=5 && ((x*5+y*3)%9===0)) grid[y][x]=5;
+  }
+  // player start: first room centre
+  player.x=rooms[0].cx+0.5; player.y=rooms[0].cy+0.5; player.ang=rng()*Math.PI*2;
+  // exit: farthest room from start
+  let far=rooms[0], fd=-1;
+  for(const r of rooms){ const dd=(r.cx-player.x)**2+(r.cy-player.y)**2; if(dd>fd){fd=dd;far=r;} }
+  items=[{x:far.cx+0.5,y:far.cy+0.5,kind:'exit'}];
+  enemies=[];
+  const nE=Math.min(6+d*2, 26);
+  const types = d===1?['guard','dog'] : d===2?['guard','dog','officer'] : d%3===0?['guard','officer','mutant','dog'] : ['guard','dog','officer','mutant'];
+  for(let i=0;i<nE;i++){
+    const r=pick(rooms); if(r===rooms[0]) continue;
+    const t=pick(types);
+    const base=ENEMY_TYPES[t];
+    const hpScale=1+(d-1)*0.18;
+    enemies.push({x:r.cx+rr(-1,1), y:r.cy+rr(-1,1), type:t, hp:base.hp*hpScale, maxHp:base.hp*hpScale, dmg:base.dmg*(1+(d-1)*0.08), speed:base.speed*rr(0.9,1.1), fire:0, wander:rr(0,6), ang:rr(0,6.28), flash:0, dead:false});
+  }
+  if(d%3===0){ const r=far; enemies.push({x:r.cx+0.5,y:r.cy+1.5,type:'boss',hp:ENEMY_TYPES.boss.hp*(1+(d-1)*0.15),maxHp:ENEMY_TYPES.boss.hp*(1+(d-1)*0.15),dmg:ENEMY_TYPES.boss.dmg,speed:1.3,fire:0,wander:0,ang:0,flash:0,dead:false}); }
+  // loot in rooms
+  for(const r of rooms){
+    if(r===rooms[0]) continue;
+    const n=ri(0,2);
+    for(let i=0;i<n;i++) items.push({x:r.x+rr(0.5,r.w-0.5), y:r.y+rr(0.5,r.h-0.5), kind:pick(['health','ammo','gold','gold','bomb','key'])});
+  }
+  log('FLOOR '+d+' — '+theme.name+' — '+rooms.length+' rooms, '+enemies.length+' hostiles. Seed '+(runSeed+d*7919));
+}
+function offerChoices(n){
+  levelChoices=shuffle(UPGRADES.slice()).slice(0,n);
+}
+function gainXp(n){
+  player.xp+=n*player.xpMul;
+  while(player.xp>=player.xpNext){
+    player.xp-=player.xpNext; player.level++; player.xpNext=Math.floor(player.xpNext*1.35+20);
+    levelUpPending++; sfx('level'); log('LEVEL UP — now level '+player.level);
+  }
+  if(levelUpPending>0 && state==='play'){ offerChoices(3); state='levelup'; }
+}
+function los(x0,y0,x1,y1){
+  const dx=x1-x0, dy=y1-y0, dist=Math.hypot(dx,dy), steps=Math.ceil(dist*4);
+  for(let i=1;i<steps;i++){ const x=x0+dx*i/steps, y=y0+dy*i/steps; if(grid[Math.floor(y)] && grid[Math.floor(y)][Math.floor(x)]>0) return false; }
+  return true;
+}
+function castRay(angle){
+  const dx=Math.cos(angle), dy=Math.sin(angle);
+  let mapX=Math.floor(player.x), mapY=Math.floor(player.y);
+  const dDX=Math.abs(1/(dx||1e-9)), dDY=Math.abs(1/(dy||1e-9));
+  let stepX, stepY, sDX, sDY;
+  if(dx<0){stepX=-1;sDX=(player.x-mapX)*dDX}else{stepX=1;sDX=(mapX+1-player.x)*dDX}
+  if(dy<0){stepY=-1;sDY=(player.y-mapY)*dDY}else{stepY=1;sDY=(mapY+1-player.y)*dDY}
+  let side=0, guard=0;
+  while(guard++<64){
+    if(sDX<sDY){sDX+=dDX;mapX+=stepX;side=0}else{sDY+=dDY;mapY+=stepY;side=1}
+    if(mapX<0||mapY<0||mapX>=mapW||mapY>=mapH) return {dist:64,side:0,type:1,tex:0};
+    const t=grid[mapY][mapX];
+    if(t>0){ const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:t,tex:wallX-Math.floor(wallX)}; }
+  }
+  return {dist:64,side:0,type:1,tex:0};
+}
+// --- combat ---
+let shootCd=0, reloadT=0, reloading=false;
+function startReload(){
+  const w=WEAPONS[player.weapon];
+  if(reloading||reloadT>0) return;
+  if(player.mags[player.weapon]>=w.mag) return;
+  if(isFinite(w.ammo)&&w.ammo<=0&&player.mags[player.weapon]<=0){ log('No ammo for '+w.name+' — switch weapons (1-5)'); return; }
+  reloading=true; reloadT=1.0; log('Reloading '+w.name+'...');
+}
+function completeReload(){
+  const w=WEAPONS[player.weapon];
+  const need=w.mag-player.mags[player.weapon];
+  if(isFinite(w.ammo)){ const take=Math.min(need,w.ammo); player.mags[player.weapon]+=take; w.ammo-=take; }
+  else player.mags[player.weapon]=w.mag;
+  reloading=false; log('Reloaded '+w.name);
+}
+function tryShoot(){
+  if(state!=='play'||reloadT>0||shootCd>0) return;
+  const w=WEAPONS[player.weapon];
+  if(player.mags[player.weapon]<=0){ sfx('hit'); startReload(); return; }
+  shootCd=w.rate*player.rateMul;
+  player.mags[player.weapon]--;
+  flash=0.09; shake=Math.max(shake,w.kick*0.4);
+  sfx(w.name==='SHOTGUN'?'shotgun':'shoot');
+  for(let p=0;p<w.pellets;p++){
+    const a=player.ang+rr(-w.spread,w.spread);
+    let best=null, bestD=w.range;
+    for(const e of enemies){
+      if(e.dead) continue;
+      const dx=e.x-player.x, dy=e.y-player.y, d=Math.hypot(dx,dy);
+      if(d>w.range||d<0.3) continue;
+      let da=Math.atan2(dy,dx)-a; while(da>Math.PI)da-=2*Math.PI; while(da<-Math.PI)da+=2*Math.PI;
+      if(Math.abs(da)<0.09+0.35/d && los(player.x,player.y,e.x,e.y) && d<bestD){ best=e; bestD=d; }
+    }
+    if(best){
+      let dmg=w.dmg*player.dmgMul*(1-bestD/w.range*0.4);
+      let crit=false;
+      if(Math.random()<player.crit){ dmg*=2; crit=true; }
+      best.hp-=dmg; best.flash=0.12;
+      if(player.lifesteal) player.hp=Math.min(player.maxHp, player.hp+dmg*player.lifesteal);
+      sfx('hit');
+      if(best.hp<=0){
+        best.dead=true; player.kills++; player.score+=ENEMY_TYPES[best.type].score;
+        gainXp(ENEMY_TYPES[best.type].xp);
+        log((crit?'CRIT! ':'')+'Killed '+best.type.toUpperCase()+' +'+ENEMY_TYPES[best.type].xp+' XP');
+        if(Math.random()<0.3) items.push({x:best.x,y:best.y,kind:pick(['health','ammo','gold','bomb'])});
+        if(best.type==='boss'){ items.push({x:best.x,y:best.y,kind:'gold'}); items.push({x:best.x+0.4,y:best.y,kind:'health'}); log('BOSS DOWN — loot dropped'); }
+      }
+    }
+  }
+  if(player.mags[player.weapon]===0) startReload();
+}
+function throwBomb(){
+  if(state!=='play'||player.bombs<=0) return;
+  player.bombs--; flash=0.15; shake=2; sfx('shotgun');
+  let hit=0;
+  for(const e of enemies){ if(e.dead) continue; const d=Math.hypot(e.x-player.x,e.y-player.y); if(d<4){ e.hp-=70*player.dmgMul; e.flash=0.2; hit++; if(e.hp<=0){e.dead=true;player.kills++;player.score+=ENEMY_TYPES[e.type].score;gainXp(ENEMY_TYPES[e.type].xp);} } }
+  log('BOMB! '+hit+' hostiles caught');
+}
+function hurtPlayer(dmg, from){
+  if(dashTime>0) return;
+  const absorbed=Math.min(player.armor, dmg*0.6); player.armor-=absorbed;
+  player.hp-= (dmg-absorbed); flash=0.15; shake=Math.max(shake,1); sfx('hurt');
+  if(player.hp<=0){ player.hp=0; state='dead'; sfx('die'); saveBest(); }
+}
+function saveBest(){
+  try{
+    const b=JSON.parse(localStorage.getItem('qwertystein-best')||'{"depth":0,"score":0,"kills":0}');
+    b.depth=Math.max(b.depth,depth); b.score=Math.max(b.score,player.score); b.kills=Math.max(b.kills,player.kills);
+    localStorage.setItem('qwertystein-best', JSON.stringify(b));
+  }catch(e){}
+}
+function best(){
+  try{ return JSON.parse(localStorage.getItem('qwertystein-best')||'{"depth":0,"score":0,"kills":0}'); }catch(e){ return {depth:0,score:0,kills:0}; }
+}
+// --- update ---
+function update(dt){
+  if(state!=='play') return;
+  shootCd-=dt; if(reloadT>0){ reloadT-=dt; if(reloadT<=0) completeReload(); } flash-=dt; shake=Math.max(0,shake-dt*3); dashTime-=dt;
+  player.dashCd-=dt;
+  if(player.regen) player.hp=Math.min(player.maxHp, player.hp+player.regen*dt);
+  // mouse look
+  if(mouseDX){ player.ang+=mouseDX*0.0028; mouseDX=0; }
+  const turn=(keys['ArrowLeft']?1:0)-(keys['ArrowRight']?1:0);
+  player.ang+=turn*dt*2.6;
+  // movement: WASD, Shift run, Q dash
+  let mx=0,my=0;
+  if(keys['KeyW'])my+=1; if(keys['KeyS'])my-=1; if(keys['KeyA'])mx-=1; if(keys['KeyD'])mx+=1;
+  if(keys['KeyQ']&&player.dashCd<=0){ player.dashCd=player.dashCdMax; dashTime=0.22; beep(500,0.1,'sine',0.05); }
+  let sp=3.4*player.speedMul*(keys['ShiftLeft']||keys['ShiftRight']?1.5:1)*(dashTime>0?2.6:1);
+  const ca=Math.cos(player.ang), sa=Math.sin(player.ang);
+  const vx=(ca*my - sa*mx)*sp*dt, vy=(sa*my + ca*mx)*sp*dt;
+  movePlayer(vx,vy);
+  if(keys['Space']||firing) tryShoot();
+  if(keys['KeyT']){ keys['KeyT']=false; throwBomb(); }
+  if(keys['KeyR']){ keys['KeyR']=false; startReload(); }
+  // enemies
+  for(const e of enemies){
+    if(e.dead) continue;
+    e.flash-=dt; e.fire-=dt; e.wander-=dt;
+    const dx=player.x-e.x, dy=player.y-e.y, d=Math.hypot(dx,dy);
+    const seen=d<9&&los(e.x,e.y,player.x,player.y);
+    if(seen){
+      e.ang=Math.atan2(dy,dx);
+      if(d>1.2){ e.x+=Math.cos(e.ang)*e.speed*dt; e.y+=Math.sin(e.ang)*e.speed*dt; }
+      if(e.fire<=0){
+        const base=ENEMY_TYPES[e.type]; e.fire=base.fire*rr(0.8,1.3);
+        if(d<base.range){ if(Math.random()<0.55) hurtPlayer(e.dmg*rr(0.8,1.2), e.type); else log(e.type.toUpperCase()+' missed'); }
+      }
+    } else if(e.wander<=0){ e.wander=rr(2,5); e.ang=rr(0,6.28); }
+    else { e.x+=Math.cos(e.ang)*e.speed*0.3*dt; e.y+=Math.sin(e.ang)*e.speed*0.3*dt; }
+    // keep enemies out of walls
+    if(grid[Math.floor(e.y)]&&grid[Math.floor(e.y)][Math.floor(e.x)]>0){ e.x-=Math.cos(e.ang)*e.speed*dt; e.y-=Math.sin(e.ang)*e.speed*dt; }
+  }
+  // pickups
+  for(const it of items){
+    if(it.taken) continue;
+    const d=Math.hypot(it.x-player.x,it.y-player.y);
+    if(d<0.7){
+      if(it.kind==='exit'){
+        sfx('exit'); player.score+=500*depth; player.gold+=1;
+        floorClearPending=true; offerChoices(3); state='floorclear'; log('FLOOR '+depth+' CLEAR — pick an upgrade, then descend');
+      } else if(it.kind==='health'){ player.hp=Math.min(player.maxHp,player.hp+30); it.taken=true; sfx('pickup'); log('+30 HP'); }
+      else if(it.kind==='ammo'){ for(const w of WEAPONS) if(isFinite(w.ammo)) w.ammo+=30; it.taken=true; sfx('pickup'); log('+30 ammo (all guns)'); }
+      else if(it.kind==='gold'){ player.score+=200; player.gold++; it.taken=true; sfx('pickup'); log('+$ TREASURE +200 score'); }
+      else if(it.kind==='bomb'){ player.bombs=Math.min(player.maxBombs,player.bombs+1); it.taken=true; sfx('pickup'); log('+1 bomb'); }
+      else if(it.kind==='key'){ player.score+=100; it.taken=true; sfx('pickup'); log('Found a brass key (+100)'); }
+    }
+  }
+  if(levelUpPending>0 && state==='play'){ offerChoices(3); state='levelup'; }
+}
+function movePlayer(vx,vy){
+  const r=0.22;
+  let nx=player.x+vx;
+  if(!(grid[Math.floor(player.y)][Math.floor(nx+Math.sign(vx)*r)]>0)) player.x=nx;
+  let ny=player.y+vy;
+  if(!(grid[Math.floor(ny+Math.sign(vy)*r)][Math.floor(player.x)]>0)) player.y=ny;
+}
+// --- rendering: dense ASCII buffer ---
+let buf=[], col=[];
+function clearBuf(ch,c){ buf=[]; col=[]; for(let y=0;y<ROWS;y++){ buf.push(new Array(COLS).fill(ch)); col.push(new Array(COLS).fill(c)); } }
+function put(x,y,ch,c){ if(x<0||y<0||x>=COLS||y>=ROWS) return; buf[y][x]=ch; col[y][x]=c; }
+function drawText(x,y,s,c){ for(let i=0;i<s.length;i++) put(x+i,y,s[i],c); }
+function render(){
+  clearBuf(' ','#888');
+  const horizon=ROWS>>1;
+  const fov=Math.PI/3;
+  // walls + floor/ceiling per column
+  for(let x=0;x<COLS;x++){
+    const a=player.ang - fov/2 + fov*x/COLS;
+    const r=castRay(a);
+    const dist=r.dist*Math.cos(a-player.ang); // fisheye correction
+    zbuf[x]=dist;
+    const wallH=Math.min(ROWS, Math.floor(ROWS*0.9/Math.max(0.15,dist)));
+    const top=horizon-(wallH>>1), bot=top+wallH;
+    const art=WALL_ART[r.type]||WALL_ART[1];
+    const texX=Math.min(7,Math.floor(r.tex*8));
+    const baseCol=theme.wall[(r.type-1)%theme.wall.length];
+    for(let y=0;y<ROWS;y++){
+      if(y<top){
+        // ceiling: sparse dots, darker with height
+        const ch=y%3===0?'.':' ';
+        put(x,y,ch, shadeColor(theme.ceil, 2));
+      } else if(y>=bot){
+        // floor: dense gradient by row distance
+        const fd=(y-horizon)/Math.max(1,(ROWS-horizon));
+        const ch=fd<0.25?'#':fd<0.5?'+':fd<0.75?':':'.';
+        put(x,y,ch, shadeColor(theme.floor, 1+fd*4));
+      } else {
+        const texY=Math.min(7,Math.floor((y-top)/Math.max(1,wallH)*8));
+        const ch=art[texY][texX];
+        let c=shadeColor(baseCol, dist);
+        if(r.side===1) c=shadeColor(baseCol, dist+1.5);
+        put(x,y,ch,c);
+      }
+    }
+  }
+  // sprites: items + enemies, far to near, with z-buffer
+  const sprs=[];
+  for(const it of items) if(!it.taken) sprs.push({x:it.x,y:it.y,art:SPRITES[it.kind],color:it.kind==='exit'?'#7ee081':it.kind==='health'?'#ff7070':it.kind==='gold'?'#ffd75e':'#c0c0c0',scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
+  for(const e of enemies) if(!e.dead){ const b=ENEMY_TYPES[e.type]; sprs.push({x:e.x,y:e.y,art:SPRITES[b.spr],color:e.flash>0?'#ffffff':b.color,scale:e.type==='boss'?1.6:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e)}); }
+  sprs.sort((a,b)=>b.dist-a.dist);
+  for(const s of sprs){
+    const dx=s.x-player.x, dy=s.y-player.y, d=s.dist;
+    if(d<0.3||d>18) continue;
+    let da=Math.atan2(dy,dx)-player.ang; while(da>Math.PI)da-=2*Math.PI; while(da<-Math.PI)da+=2*Math.PI;
+    if(Math.abs(da)>fov/2+0.3) continue;
+    const sx=Math.floor((0.5+da/fov)*COLS);
+    const h=Math.floor(ROWS*0.9/d*s.scale*0.9), w=Math.floor(h*0.7);
+    const top=horizon-(h>>1);
+    const art=s.art, ah=art.length, aw=art[0].length;
+    for(let sy=0;sy<h;sy++){
+      const ay=Math.min(ah-1,Math.floor(sy/h*ah));
+      for(let sx2=0;sx2<w;sx2++){
+        const ax=Math.min(aw-1,Math.floor(sx2/w*aw));
+        const ch=art[ay][ax]; if(ch===' ') continue;
+        const cx=sx-(w>>1)+sx2;
+        if(cx<0||cx>=COLS) continue;
+        if(d>zbuf[cx]+0.2) continue;
+        put(cx, top+sy, ch, shadeColor(s.color, d*0.7));
+      }
+    }
+    if(s.hp!==undefined){
+      const bw=7, bx=sx-(bw>>1), by=top-1;
+      for(let i=0;i<bw;i++) put(bx+i,by, i/bw<s.hp?'#':'-','#ff6060');
+    }
+  }
+  // weapon (bottom centre) + muzzle flash
+  const wArt=WEAPON_ART[player.weapon];
+  const wx=Math.floor(COLS/2)-4, wy=ROWS-wArt.length-1;
+  for(let y=0;y<wArt.length;y++) for(let x=0;x<wArt[y].length;x++){ const ch=wArt[y][x]; if(ch!==' ') put(wx+x,wy+y,ch, flash>0?'#ffd75e':'#c8c8c8'); }
+  if(flash>0){ put(Math.floor(COLS/2), wy-1, '*', '#ffffff'); put(Math.floor(COLS/2)+1, wy-1, '*', '#ffd75e'); put(Math.floor(COLS/2), wy-2, '*', '#ffd75e'); }
+  // HUD
+  drawText(0,0,'QWERTYSTEIN  FLOOR '+depth+' '+theme.name+'  SEED '+runSeed, '#ffd75e');
+  drawText(0,1,'HP '+Math.ceil(player.hp)+'/'+player.maxHp+'  ARM '+Math.floor(player.armor)+'  '+WEAPONS[player.weapon].name+' '+player.mags[player.weapon]+'/'+(isFinite(WEAPONS[player.weapon].ammo)?WEAPONS[player.weapon].ammo:'--')+'  BOMBS '+player.bombs+'  DASH '+(player.dashCd<=0?'READY':Math.ceil(player.dashCd)+'s'), '#7ee081');
+  drawText(0,2,'LV '+player.level+'  XP '+Math.floor(player.xp)+'/'+player.xpNext+'  SCORE '+player.score+'  KILLS '+player.kills+'  GOLD '+player.gold+'  '+(reloadT>0?'RELOADING...':''), '#c0c0c0');
+  // XP bar
+  const xpW=Math.floor(COLS*0.3), xpF=Math.floor(xpW*player.xp/player.xpNext);
+  for(let i=0;i<xpW;i++) put(i,3, i<xpF?'=':'-', '#7ee081');
+  // minimap top-right
+  const mw=18, mh=18, ox=COLS-mw-1, oy=5;
+  for(let my=0;my<mh;my++) for(let mx=0;mx<mw;mx++){
+    const gx=Math.floor(mx/mw*mapW), gy=Math.floor(my/mh*mapH);
+    put(ox+mx,oy+my, grid[gy][gx]>0?'#':'.', grid[gy][gx]>0?'#555':'#222');
+  }
+  put(ox+Math.floor(player.x/mapW*mw), oy+Math.floor(player.y/mapH*mh), '@', '#ffd75e');
+  for(const e of enemies) if(!e.dead) put(ox+Math.floor(e.x/mapW*mw), oy+Math.floor(e.y/mapH*mh), 'x', '#ff6060');
+  for(const it of items) if(!it.taken&&it.kind==='exit') put(ox+Math.floor(it.x/mapW*mw), oy+Math.floor(it.y/mapH*mh), 'E', '#7ee081');
+  // logs bottom-left above weapon
+  logs.forEach((m,i)=>drawText(0, ROWS-6+i, m.slice(0,60), '#888888'));
+  // overlays
+  if(state==='title') overlayTitle();
+  if(state==='levelup'||state==='floorclear') overlayChoices();
+  if(state==='dead') overlayDead();
+  if(state==='paused') overlayText('PAUSED — press P to resume', '#ffd75e');
+  // blit buffer to canvas
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,cv.width,cv.height);
+  const ox2=shake>0?rr(-shake,shake)*2:0, oy2=shake>0?rr(-shake,shake)*2:0;
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+    ctx.fillStyle=col[y][x];
+    ctx.fillText(buf[y][x], x*CW+ox2, y*CH+oy2);
+  }
+}
+function maxHpSafe(e){ return e.maxHp||1; }
+function overlayText(s,c){
+  drawText(Math.floor((COLS-s.length)/2), Math.floor(ROWS/2), s, c);
+}
+function overlayTitle(){
+  const lines=[
+    '  ____   _       _____________   _______ ___________ _____ _   _ ',
+    ' / __ \\ | |     |  ___| ___ \\ \\ / /_   _|  ___| ___ \\_   _| \\ | |',
+    '| /  \\/ | |     | |__ | |_/ /\\ V /  | | | |__ | |_/ / | | |  \\| |',
+    '| |     | |     |  __||    /  \\ /   | | |  __||    /  | | | . ` |',
+    '| \\__/\\ | |____ | |___| |\\ \\  | |   | | | |___| |\\ \\ _| |_| |\\  |',
+    ' \\____/ \\_____/ \\____/\\_| \\_| \\_/   \\_/ \\____/\\_| \\_|\\___/\\_| \\_/',
+    '',
+    'A WOLFENSTEIN-STYLE RAYCASTER IN DENSE ASCII ART',
+    'Procedural floors. Roguelike runs. Permadeath. No mercy.',
+    '',
+    'WASD move — mouse look — click / Space shoot — 1-5 weapons',
+    'Q dash — T bomb — R reload — Shift run — P pause',
+    'Find the [EXIT] portal. Kill. Level up. Pick upgrades. Go deeper.',
+    '',
+    'BEST: floor '+best().depth+'  score '+best().score+'  kills '+best().kills,
+    '',
+    '>>> CLICK HERE, then press ENTER to start <<<',
+  ];
+  const y0=4;
+  lines.forEach((s,i)=>drawText(Math.floor((COLS-s.length)/2), y0+i, s, i<6?'#ffd75e':i===13?'#7ee081':'#d8d8c8'));
+}
+function overlayChoices(){
+  const title=state==='floorclear'?'FLOOR '+depth+' CLEAR — CHOOSE AN UPGRADE, THEN DESCEND':'LEVEL UP — CHOOSE AN UPGRADE';
+  drawText(Math.floor((COLS-title.length)/2), 8, title, '#ffd75e');
+  levelChoices.forEach((u,i)=>{
+    const s='['+(i+1)+'] '+u.name+' — '+u.desc;
+    drawText(Math.floor((COLS-s.length)/2), 11+i*2, s, '#7ee081');
+  });
+  drawText(Math.floor((COLS-28)/2), 18, 'Press 1, 2 or 3 to choose', '#c0c0c0');
+}
+function overlayDead(){
+  const b=best();
+  const lines=[
+    'YOU DIED ON FLOOR '+depth,
+    '',
+    'Score '+player.score+'   Kills '+player.kills+'   Level '+player.level+'   Gold '+player.gold,
+    'Best run: floor '+b.depth+'  score '+b.score,
+    '',
+    'The castle forgets you. The seed does not.',
+    'Press N for a new run (new seed, new castle)',
+  ];
+  lines.forEach((s,i)=>drawText(Math.floor((COLS-s.length)/2), 14+i, s, i===0?'#ff6060':'#d8d8c8'));
+}
+// --- input ---
+document.addEventListener('keydown', e=>{
+  keys[e.code]=true;
+  if(e.code==='Space') e.preventDefault();
+  if(state==='title'&&(e.code==='Enter'||e.code==='Space')){ newRun(); return; }
+  if(state==='dead'&&e.code==='KeyN'){ newRun(); return; }
+  if(e.code==='KeyP'&&state==='play'){ state='paused'; return; }
+  if(e.code==='KeyP'&&state==='paused'){ state='play'; return; }
+  if(e.code==='KeyM'){ muted=!muted; log(muted?'Muted':'Sound on'); return; }
+  if((state==='levelup'||state==='floorclear')&&['Digit1','Digit2','Digit3'].includes(e.code)){
+    const i=+e.code.slice(-1)-1, u=levelChoices[i];
+    if(u){ applyUpgrade(u); levelUpPending=Math.max(0,levelUpPending-1);
+      if(state==='floorclear'){ genLevel(depth+1); state='play'; }
+      else if(levelUpPending>0){ offerChoices(3); }
+      else state='play';
+    }
+    return;
+  }
+  if(state==='play'&&['Digit1','Digit2','Digit3','Digit4','Digit5'].includes(e.code)){
+    const w=+e.code.slice(-1)-1;
+    if(w===2&&false){} // SMG locked? no — all weapons available from start, ammo is the limit
+    player.weapon=w; reloadT=0; reloading=false; log('Weapon: '+WEAPONS[w].name);
+  }
+});
+document.addEventListener('keyup', e=>{ keys[e.code]=false; });
+cv.addEventListener('click', ()=>{
+  if(state==='title'){ newRun(); return; }
+  if(state==='play'){
+    try{ cv.requestPointerLock(); }catch(e){}
+    firing=true; tryShoot(); setTimeout(()=>firing=false,120);
+  }
+});
+document.addEventListener('mousemove', e=>{ if(document.pointerLockElement===cv) mouseDX+=e.movementX; });
+document.addEventListener('mouseup', ()=>{ firing=false; });
+document.addEventListener('pointerlockchange', ()=>{ if(document.pointerLockElement!==cv) mouseDX=0; });
+// touch buttons
+document.querySelectorAll('#touch button').forEach(b=>{
+  const k=b.dataset.k;
+  b.addEventListener('pointerdown', e=>{ e.preventDefault(); keys[k]=true; if(k==='Space') tryShoot(); });
+  b.addEventListener('pointerup', ()=>{ keys[k]=false; });
+  b.addEventListener('pointerleave', ()=>{ keys[k]=false; });
+});
+// --- main loop ---
+function loop(t){
+  const dt=Math.min(0.05,(t-lastTime)/1000||0.016); lastTime=t;
+  if(state==='play') update(dt);
+  else if(state==='title'&&!player){ // idle title backdrop: fake a level behind the title
+    if(!grid){ runSeed=42; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,mags:[Infinity,12,32,6,60],kills:0,score:0,gold:0,dead:false}; genLevel(1); player.ang+=dt*0.1; }
+  }
+  render();
+  requestAnimationFrame(loop);
+}
+state='title';
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
