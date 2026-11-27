@@ -931,8 +931,8 @@ function genLevel(d){
   }
   enemies=[];
   const nE=Math.min(12+d*4, 55); // Eviternity: bigger fights
-  const types = d===1?['guard','dog']
-    : d===2?['guard','dog','officer','nightmare','imp'] // Imp from floor 2
+  const types = d===1?['guard','dog','imp','pinky','mancubus'] // floor 1: knights, lions, imps, pinkys, mancubus
+    : d===2?['guard','dog','officer','nightmare','imp','pinky','mancubus']
     : d===3?['guard','dog','officer','ss','mutant','nightmare','imp','pinky'] // Pinky from floor 3
     : d===4?['guard','dog','officer','ss','mutant','nightmare','imp','pinky','mancubus','hellknight'] // Mancubus + Hell Knight from floor 4
     : ['guard','dog','officer','ss','mutant','nightmare','imp','pinky','mancubus','hellknight','astral','revenant']; // Astral Cacodemon + Revenant from floor 5
