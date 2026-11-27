@@ -1,6 +1,6 @@
 # QWERTYTERNITY
 
-An Eviternity-style raycaster running entirely in the browser. No build step, no libraries — one `index.html` (plus a Google Fonts link for the HUD typeface). It started life as QWERTYSTEIN (a Wolfenstein-style raycaster); it is now QWERTYTERNITY — Doom, but bigger, in the spirit of Eviternity: epic scale, grand halls, new monsters, and a heavenly Astral episode. Walls are Doom-style 64×64 texture slices, enemies are drawn sprites, and the floors have Doom-style sector heights (raised platforms, a boss dais). And it looks the part now: every episode has its own scrolling sky (the Astral episode's is a pink cloudy heaven), the walls carry glowing teal inlay and gold runes, the grand halls have glowing pillars, and the Astral and Gothic rooms have trees.
+An Eviternity-style raycaster running entirely in the browser. No build step, no libraries — one `index.html` (plus a Google Fonts link for the HUD typeface). It started life as QWERTYSTEIN (a Wolfenstein-style raycaster); it is now QWERTYTERNITY — Doom, but bigger, in the spirit of Eviternity: epic scale, grand halls, new monsters, and a heavenly Astral episode. Walls are Doom-style 64×64 texture slices, enemies are drawn sprites, and the floors have Doom-style sector heights (raised platforms, a boss dais). And it looks the part now: every episode has its own scrolling sky (the Astral episode's is a pink cloudy heaven), the walls carry glowing teal inlay and gold runes, and every floor is an outdoor-first map — you spawn in a big octagonal plaza with diagonal walls, glowing pillars and trees, with indoor rooms attached. The human enemies are knights (plate armour, great helms, crossbows) and the dogs are lions.
 
 Play it live: https://bthompson91.github.io/qwertyternity/
 
@@ -31,9 +31,9 @@ Yes — any standard gamepad works via the browser Gamepad API, no install neede
 
 ## Procedural levels
 
-Every floor is generated from the run seed: up to 16 rooms connected by corridors on a 64×64 grid, plus one **grand hall** per floor — a huge arena (14–20 × 10–13 tiles) with a 2.5-tall ceiling, a platform, and a pack of enemies. Enemy count, health and damage scale with depth. The exit portal is always in the room farthest from your spawn.
+Every floor is generated from the run seed: you spawn outdoors in a big octagonal **plaza** (16–22 × 12–16 tiles, its corners chamfered off with 45° diagonal walls, 3–5 trees, glowing pillars, a platform), with up to 16 indoor rooms attached by corridors. The plaza has a 2.5-tall open sky above it; indoors the ceiling is flat and dark. Enemy count, health and damage scale with depth. The exit portal is always in the room farthest from your spawn.
 
-Floors run in **Eviternity episodes**, one theme per 4 floors: **Episode 1 — UAC Tech Base** (floors 1–4), **Episode 2 — Hell's Gate** (5–8), **Episode 3 — Gothic** (9–12), **Episode 4 — Astral** (13–16, the heavenly finale, with its own bright gold-and-white textures and an original heroic track), then the cycle repeats. A boss spawns every third floor: **Hans Grosse** on floors 3, 9, 15… and **the Annihilator** — Eviternity's big Baron — on every 6th floor.
+Floors run in **Eviternity episodes**, one theme per 4 floors: **Episode 1 — UAC Tech Base** (floors 1–4), **Episode 2 — Hell's Gate** (5–8), **Episode 3 — Gothic** (9–12), **Episode 4 — Astral** (13–16, the heavenly finale, with its own bright gold-and-white textures and an original heroic track), then the cycle repeats. A boss spawns every third floor: **the Knight Lord** on floors 3, 9, 15… and **the Annihilator** — Eviternity's big Baron — on every 6th floor.
 
 ## Roguelike progression
 
@@ -54,7 +54,7 @@ The gameplay logic is ported from the real Wolfenstein 3D source (id Software, 1
 Ported, with file references in the code:
 
 - **Maps** (`WL_DEF.H`, `WL_GAME.C`): 64×64 grid (`MAPSIZE 64`), tile codes for walls, doors (90–101), pushwalls (98), elevator (21), exit (99), ambush (106).
-- **Enemies** (`WL_ACT2.C`): guard 25 HP / 100 pts, officer 50 / 400, SS 100 / 500, dog 1 / 200, mutant 55 / 700, Hans Grosse 850 / 5000; drops (clip +4, Hans drops the gold key). Eviternity monsters: **Nightmare Demon** (from floor 2, 40 HP — a shadowy spectre that flickers in and out of sight, fast, bites), **Astral Cacodemon** (from floor 5, 120 HP — a floating red sphere that spits a spread of 3 fireballs), **the Annihilator** (every 6th floor, 1200 HP — a bulkier horned Baron that hurls green hellfire).
+- **Enemies** (`WL_ACT2.C`): **Knight** 25 HP / 100 pts, **Knight Captain** 50 / 400, **Dark Knight** 100 / 500, **Lion** 1 / 200, **Hedge Knight** 55 / 700, **the Knight Lord** 850 / 5000; drops (clip +4, the Knight Lord drops the gold key). Eviternity monsters: **Nightmare Demon** (from floor 2, 40 HP — a shadowy spectre that flickers in and out of sight, fast, bites), **Astral Cacodemon** (from floor 5, 120 HP — a floating red sphere that spits a spread of 3 fireballs), **the Annihilator** (every 6th floor, 1200 HP — a bulkier horned Baron that hurls green hellfire).
 - **Enemy AI** (`WL_STATE.C`): `T_Stand` / `T_Path` / `T_Chase` / `T_Shoot` / `T_DogChase` / `T_Bite` state machine, `SightPlayer` reaction delays, `FirstSighting` speed multipliers, `CheckLine`, attack chance `(tics<<4)/dist`, shoot hit-chance and damage tables by distance, pain state (10 tics, dogs have none), damage doubled on unaware enemies.
 - **Weapons** (`WL_AGENT.C`): `GunAttack` hitscan pick + damage by distance (`dist<2: Rnd/4, dist<4: Rnd/6`), `KnifeAttack` (1.5 tiles, `Rnd>>4`), `ClipMove` wall sliding, `Cmd_Use` on **E**.
 - **Doors** (`WL_ACT1.C`): sliding doors, open ~3–4 s (`OPENTICS 300`), re-open if blocked, locks 1–4 needing keys, enemies open them too.
@@ -91,7 +91,7 @@ has 1–2 raised platforms (a 0.5 step you walk straight up, no jumping
 needed) in tall rooms with 1.5 ceilings, and a dais under the boss on
 every 3rd floor. Your eye rides the floor you're standing on, walls
 take their base and ceiling from the room you're in, and the step
-faces are drawn as dark risers. And every floor has a **grand hall** — a huge arena with a 2.5 ceiling, the tallest space in the game. There are no stairs or multi-storey floors — it's Doom's sector heights, not a second storey.
+faces are drawn as dark risers. And every floor has an outdoor **plaza** — a huge open octagon with a 2.5 ceiling (the sky), the tallest space in the game — with indoor rooms attached. There are no stairs or multi-storey floors — it's Doom's sector heights, not a second storey.
 
 ## Unicode + ASCII art
 
@@ -104,12 +104,10 @@ its own OTEX-style textures: the tech base uses clean panels with a
 glowing trim, Hell and Gothic use a pointed-arch gothic texture and a
 pillar texture — dark stone columns with glowing teal inlay and a gold
 rune — and the Astral episode uses bright marble with gold veins and a
-gold rune. The door is a glowing gold portal. The grand hall on every
+gold rune. The door is a glowing gold portal. The plaza on every
 floor has four glowing pillars at its corners, and the Astral and
 Gothic rooms have trees. Enemies and guns are drawn
-sprites, not ASCII: muted, dark-outlined figures for guard, officer,
-SS, dog (in profile, teeth showing), mutant and Hans Grosse — slit
-eyes under heavy brows, a rifle aimed at the viewer — plus Eviternity's
+sprites, not ASCII: knights in plate armour with great helms and crossbows (plain steel, gold-trimmed captain, black Dark Knight, green Hedge Knight, gold Knight Lord), a lion in profile with a big mane and a tail tuft — plus Eviternity's
 own monsters: a shadowy Nightmare Demon, a floating Astral Cacodemon,
 and the horned Annihilator — and Doom-style
 viewmodels for all eight weapons. Items (first aid, food, clip,
@@ -127,7 +125,7 @@ with a big " GLORY KILL " banner and a per-type execution line
 (SNAPPED HIS NECK / HELMET CRUSH / RIBCAGE RIP / SKULL SPLIT /
 PUNTED INTO NEXT WEEK), +15 HP, a food drop at the corpse, +100 bonus
 score on top of the kill, and 1.5s invulnerability — Eternal's
-execution i-frames. Hans Grosse can't be staggered. Glory kills are
+execution i-frames. The Knight Lord can't be staggered. Glory kills are
 the health economy, like Eternal: the counter is in the HUD.
 
 ## Doom weapons (all 8 originals) + Eternal meat hook

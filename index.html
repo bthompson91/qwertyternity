@@ -403,15 +403,15 @@ const SPRITES={
 // Drops: guard/officer/SS/mutant drop a clip (+4 ammo); SS drops the
 // machine gun if the player lacks it; Hans drops the gold key.
 const ENEMY_TYPES={
- guard:  {hp:25, dmg:7,  speed:1.1, patrol:0.55, chaseMul:3, range:7, xp:10, score:100, color:'#d8b060', spr:'guard',   fire:1.6, reaction:4},
- dog:    {hp:1,  dmg:6,  speed:2.3, patrol:1.5,  chaseMul:2, range:1.4, xp:12, score:200, color:'#c09070', spr:'dog',   fire:0.9, reaction:8, melee:true},
+ guard:  {hp:25, dmg:7,  speed:1.1, patrol:0.55, chaseMul:3, range:7, xp:10, score:100, color:'#c8c8c8', spr:'guard',   fire:1.6, reaction:4, name:'KNIGHT'},
+ dog:    {hp:1,  dmg:6,  speed:2.3, patrol:1.5,  chaseMul:2, range:1.4, xp:12, score:200, color:'#c09050', spr:'dog',   fire:0.9, reaction:8, melee:true, name:'LION'},
  nightmare:{hp:40, dmg:14, speed:2.6, patrol:1.2, chaseMul:2, range:1.6, xp:25, score:600, color:'#a040a0', spr:'nightmare', fire:0.9, reaction:6, melee:true},
  astral:  {hp:120,dmg:10, speed:0.9, patrol:0.4,  chaseMul:2, range:10, xp:50, score:1000,color:'#ff6060', spr:'astral', fire:2.2, reaction:4, shots:1, hover:0.35},
  annihilator:{hp:1200,dmg:22,speed:1.2,patrol:0.4, chaseMul:3, range:10, xp:200,score:8000,color:'#c04040', spr:'annihilator', fire:1.6, reaction:1, shots:1, name:'ANNIHILATOR'},
- officer:{hp:50, dmg:12, speed:1.5, patrol:0.55, chaseMul:5, range:8, xp:20, score:400, color:'#a0c0e0', spr:'officer', fire:1.3, reaction:2},
- ss:     {hp:100,dmg:14, speed:1.4, patrol:0.55, chaseMul:4, range:8, xp:35, score:500, color:'#b0b0b0', spr:'ss',      fire:1.1, reaction:6, shots:4},
- mutant: {hp:55, dmg:16, speed:1.0, patrol:0.55, chaseMul:3, range:6, xp:30, score:700, color:'#80d080', spr:'mutant', fire:1.8, reaction:6, shots:2},
- boss:   {hp:850,dmg:20, speed:1.3, patrol:0.55, chaseMul:3, range:9, xp:100,score:5000,color:'#e06060', spr:'boss',   fire:1.1, reaction:1, name:'HANS GROSSE'},
+ officer:{hp:50, dmg:12, speed:1.5, patrol:0.55, chaseMul:5, range:8, xp:20, score:400, color:'#c8a84a', spr:'officer', fire:1.3, reaction:2, name:'KNIGHT CAPTAIN'},
+ ss:     {hp:100,dmg:14, speed:1.4, patrol:0.55, chaseMul:4, range:8, xp:35, score:500, color:'#2a2a2a', spr:'ss',      fire:1.1, reaction:6, shots:4, name:'DARK KNIGHT'},
+ mutant: {hp:55, dmg:16, speed:1.0, patrol:0.55, chaseMul:3, range:6, xp:30, score:700, color:'#6a8a3a', spr:'mutant', fire:1.8, reaction:6, shots:2, name:'HEDGE KNIGHT'},
+ boss:   {hp:850,dmg:20, speed:1.3, patrol:0.55, chaseMul:3, range:9, xp:100,score:5000,color:'#ffd75e', spr:'boss',   fire:1.1, reaction:1, name:'THE KNIGHT LORD'},
 };
 // --- roguelike upgrades (offered 3 at a time on level-up and floor clear) ---
 const UPGRADES=[
@@ -645,6 +645,14 @@ function chooseUpgrade(i){
 let zbuf=new Float32Array(256);
 let seen=new Uint8Array(64*64); // fog of war: tiles seen this floor (1 = seen)
 let floorH=new Float32Array(64*64), ceilH=new Float32Array(64*64); // Doom sector heights: floor/ceiling height per cell (0/1 = ground)
+let diag=new Uint8Array(64*64); // diagonal walls: 0 none, 1 solid top-left, 2 top-right, 3 bottom-right, 4 bottom-left
+let outdoor=new Uint8Array(64*64); // 1 = open-air cell (sky overhead), 0 = indoors (dark ceiling)
+function diagSide(d, lx, ly){ // true if the local point (lx,ly in 0..1) is on the solid side of the diagonal
+  if(d===1) return lx+ly<1;   // solid top-left
+  if(d===2) return lx-ly>0;   // solid top-right
+  if(d===3) return lx+ly>1;   // solid bottom-right
+  return lx-ly<0;             // solid bottom-left (d===4)
+}
 let themeIdx=0; // index into THEMES for this floor (for WALL_TEX)
 function log(m){ logs.unshift(m); logs=logs.slice(0,4); }
 function newRun(){
@@ -663,14 +671,31 @@ function genLevel(d){
   // Wolf3D: MAPSIZE 64 — maps are forced 64x64 (WL_GAME.C SetupGameLevel)
   mapW=WOLF.MAPSIZE; mapH=WOLF.MAPSIZE;
   grid=[]; for(let y=0;y<mapH;y++){ grid.push(new Array(mapW).fill(1)); }
+  diag.fill(0); outdoor.fill(0);
   doors=[]; pushwalls=[]; items=[]; enemyShots=[]; decor=[];
   // Eviternity scale: one grand hall per floor — carved FIRST so it
-  // always gets a spot (a huge arena, 2.5 ceiling, a platform, a pack).
+  // always gets a spot. It is an octagonal OUTDOOR plaza now (Eviternity's
+  // open courtyards): the c x c corners are chamfered off with diagonal
+  // walls, the interior is open-air, and the player spawns in it.
+  function carveOctagon(x, y, w, h, c, texType){
+    for(let yy=y; yy<y+h; yy++) for(let xx=x; xx<x+w; xx++){
+      const sTL=(xx-x)+(yy-y), sTR=(x+w-1-xx)+(yy-y),
+            sBR=(x+w-1-xx)+(y+h-1-yy), sBL=(xx-x)+(y+h-1-yy);
+      const s=Math.min(sTL, sTR, sBR, sBL);
+      if(s<c-1) continue; // still a wall (the cut-off corner triangle)
+      if(s===c-1){ // the diagonal cell on the chamfer
+        grid[yy][xx]=texType;
+        diag[yy*64+xx]= sTL===c-1?1 : sTR===c-1?2 : sBR===c-1?3 : 4;
+        continue;
+      }
+      grid[yy][xx]=0; outdoor[yy*64+xx]=1; // open-air plaza floor
+    }
+  }
   let grandHall=null;
   for(let tries=0; tries<60 && !grandHall; tries++){
-    const w=ri(14,20), h=ri(10,13), x=ri(1,mapW-w-1), y=ri(1,mapH-h-1);
+    const w=ri(16,22), h=ri(12,16), x=ri(1,mapW-w-1), y=ri(1,mapH-h-1);
     grandHall={x,y,w,h,cx:x+(w>>1), cy:y+(h>>1)};
-    for(let yy=y;yy<y+h;yy++) for(let xx=x;xx<x+w;xx++) grid[yy][xx]=0;
+    carveOctagon(x, y, w, h, 3, 11);
   }
   // rooms (they avoid the grand hall)
   const rooms=[];
@@ -683,12 +708,15 @@ function genLevel(d){
     rooms.push({x,y,w,h,cx:x+(w>>1), cy:y+(h>>1)});
     for(let yy=y;yy<y+h;yy++) for(let xx=x;xx<x+w;xx++) grid[yy][xx]=0;
   }
-  if(grandHall) rooms.push(grandHall); // last, so the spawn (rooms[0]) is a normal room
+  if(grandHall) rooms.unshift(grandHall); // first, so the player spawns outdoors in the plaza
   function corridor(x0,y0,x1,y1){
+    // open a cell; a cell that is already open (a plaza cell) keeps its
+    // outdoor flag, a wall cell becomes an indoor corridor cell
+    const carve=(x,y)=>{ const wasWall=grid[y][x]!==0; grid[y][x]=0; diag[y*64+x]=0; if(wasWall) outdoor[y*64+x]=0; };
     let x=x0,y=y0;
-    while(x!==x1){ grid[y][x]=0; x+=Math.sign(x1-x); }
-    while(y!==y1){ grid[y][x]=0; y+=Math.sign(y1-y); }
-    grid[y][x]=0;
+    while(x!==x1){ carve(x,y); x+=Math.sign(x1-x); }
+    while(y!==y1){ carve(x,y); y+=Math.sign(y1-y); }
+    carve(x,y);
   }
   for(let i=1;i<rooms.length;i++) corridor(rooms[i-1].cx,rooms[i-1].cy,rooms[i].cx,rooms[i].cy);
   corridor(rooms[0].cx,rooms[0].cy,rooms[rooms.length-1].cx,rooms[rooms.length-1].cy);
@@ -777,9 +805,12 @@ function genLevel(d){
     for(let yy=grandHall.y;yy<grandHall.y+grandHall.h;yy++) for(let xx=grandHall.x;xx<grandHall.x+grandHall.w;xx++)
       if(grid[yy][xx]===0) ceilH[yy*64+xx]=2.5;
     raiseRect(grandHall.cx-2, grandHall.cy-1, 4, 3);
-    // pillars at the grand hall's corners (Eviternity's pillared halls)
-    for(const [px,py] of [[grandHall.x+1,grandHall.y+1],[grandHall.x+grandHall.w-2,grandHall.y+1],[grandHall.x+1,grandHall.y+grandHall.h-2],[grandHall.x+grandHall.w-2,grandHall.y+grandHall.h-2]])
+    // pillars at the plaza's corners, inset past the chamfer (Eviternity's pillared halls)
+    for(const [px,py] of [[grandHall.x+2,grandHall.y+2],[grandHall.x+grandHall.w-3,grandHall.y+2],[grandHall.x+2,grandHall.y+grandHall.h-3],[grandHall.x+grandHall.w-3,grandHall.y+grandHall.h-3]])
       decor.push({x:px+0.5, y:py+0.5, kind:'pillar', scale:1.4});
+    // trees in the plaza (Eviternity's gardens — every theme, not just Astral/Gothic)
+    for(let i=0;i<ri(3,5);i++)
+      decor.push({x:grandHall.x+2+rr(0,grandHall.w-4), y:grandHall.y+2+rr(0,grandHall.h-4), kind:'tree', scale:1.1});
   }
   enemies=[];
   const nE=Math.min(12+d*4, 55); // Eviternity: bigger fights
@@ -844,7 +875,7 @@ function gainXp(n){
 }
 function los(x0,y0,x1,y1){
   const dx=x1-x0, dy=y1-y0, dist=Math.hypot(dx,dy), steps=Math.ceil(dist*4);
-  for(let i=1;i<steps;i++){ const x=x0+dx*i/steps, y=y0+dy*i/steps; if(grid[Math.floor(y)] && grid[Math.floor(y)][Math.floor(x)]>0) return false; }
+  for(let i=1;i<steps;i++){ const x=x0+dx*i/steps, y=y0+dy*i/steps; if(solidAt(x,y)) return false; }
   return true;
 }
 function doorAt(x,y){ for(const d of doors) if(d.x===x&&d.y===y) return d; return null; }
@@ -874,6 +905,27 @@ function castRay(angle, wantPath){
     if(t===98){ // pushwall
       const wallX=side===0?player.y+bDist*dy:player.x+bDist*dx;
       return {dist:Math.max(0.05,bDist),side,type:7,tex:wallX-Math.floor(wallX),mx:mapX,my:mapY,stepX,stepY,path};
+    }
+    const dg=diag[mapY*64+mapX];
+    if(dg>0){ // diagonal wall: a 45-degree line across the cell
+      const ex=player.x+bDist*dx, ey=player.y+bDist*dy; // entry point
+      if(diagSide(dg, ex-mapX, ey-mapY)){
+        // entered on the solid side: the boundary itself is the wall
+        const wallX=side===0?player.y+bDist*dy:player.x+bDist*dx;
+        return {dist:Math.max(0.05,bDist),side,type:t,tex:wallX-Math.floor(wallX),mx:mapX,my:mapY,stepX,stepY,path};
+      }
+      // entered on the open side: does the ray cross the diagonal before leaving?
+      let tD=-1;
+      if(dg===1||dg===3){ const den=dx+dy; if(Math.abs(den)>1e-9) tD=(mapX+mapY+1-player.x-player.y)/den; }
+      else { const den=dx-dy; if(Math.abs(den)>1e-9) tD=(mapX-mapY-player.x+player.y)/den; }
+      const exitDist=Math.min(sDX,sDY);
+      if(tD>=bDist && tD<=exitDist){
+        const hx=player.x+tD*dx; // texture coordinate: fraction along the diagonal
+        return {dist:Math.max(0.05,tD),side:dg===1||dg===3?1:0,type:t,tex:hx-mapX,mx:mapX,my:mapY,stepX,stepY,path};
+      }
+      // passes through the open half of the cell
+      if(path) path.push({d:bDist,h:floorH[mapY*64+mapX]||0});
+      continue;
     }
     if(t>0){ // a wall
       const wallX=side===0?player.y+bDist*dy:player.x+bDist*dx;
@@ -927,8 +979,8 @@ function fireHook(){
 // economy, like Eternal: staggered enemies glow, and the prompt shows
 // when one is in range.
 const GLORY_LINES={
- guard:'SNAPPED HIS NECK', officer:'HELMET CRUSH', ss:'RIBCAGE RIP',
- mutant:'SKULL SPLIT', dog:'PUNTED INTO NEXT WEEK',
+ guard:'BEHEADED', officer:'CROWN SMASH', ss:'ARMOR RIP',
+ mutant:'SKULL SPLIT', dog:'MAULED BY THE LION',
 };
 let gloryT=0, gloryLine='';
 function addStagger(e, dmg){
@@ -976,7 +1028,7 @@ function killEnemy(e, crit){
   log((crit?'CRIT! ':'')+'Killed '+(ENEMY_TYPES[e.type].name||e.type.toUpperCase())+' +'+ENEMY_TYPES[e.type].xp+' XP');
   // Drops (WL_STATE.C KillActor): clip +4, SS drops machine gun if the
   // player lacks it, Hans drops the gold key
-  if(e.type==='boss'){ items.push({x:e.x,y:e.y,kind:'key1'}); items.push({x:e.x+0.4,y:e.y,kind:'firstaid'}); log('HANS GROSSE IS DOWN — gold key dropped'); }
+  if(e.type==='boss'){ items.push({x:e.x,y:e.y,kind:'key1'}); items.push({x:e.x+0.4,y:e.y,kind:'firstaid'}); log('THE KNIGHT LORD IS DOWN — gold key dropped'); }
   else if(e.type==='ss'&&Math.random()<0.6) items.push({x:e.x,y:e.y,kind:'shells'});
   else if(Math.random()<0.5) items.push({x:e.x,y:e.y,kind:'clip'});
 }
@@ -1193,27 +1245,28 @@ function drawEnemySprite(type){
     g.fillStyle=col; g.fillRect(x,y,w,h);
   };
   const P={
-    guard:{skin:'#b08a68',uni:'#4a4a34',uniD:'#2e2e20',hat:'#3a3a26'},
-    officer:{skin:'#b89878',uni:'#23232e',uniD:'#14141c',hat:'#14141c'},
-    ss:{skin:'#b08a68',uni:'#171717',uniD:'#080808',hat:'#0e0e0e'},
-    mutant:{skin:'#6a7a3e',uni:'#3a2e22',uniD:'#221a12',hat:'#2e2118'},
-    boss:{skin:'#b08a68',uni:'#2e2e3c',uniD:'#1a1a24',hat:'#22222e'},
-    dog:{skin:'#5e4630',uni:'#4a3422',uniD:'#2e2012',hat:'#4a3422'},
-  }[type]||{skin:'#b08a68',uni:'#4a4a34',uniD:'#2e2e20',hat:'#3a3a26'};
+    guard:{skin:'#b08a68',uni:'#8a8a8a',uniD:'#5a5a5a',hat:'#7a7a7a'}, // plain steel knight
+    officer:{skin:'#b89878',uni:'#9a9ab0',uniD:'#5a5a6a',hat:'#c8a84a'}, // knight captain, gold helm
+    ss:{skin:'#b08a68',uni:'#1a1a1a',uniD:'#0a0a0a',hat:'#0e0e0e'}, // dark knight, black plate
+    mutant:{skin:'#6a7a3e',uni:'#6a7a5a',uniD:'#3a4a2a',hat:'#4a5a3a'}, // hedge knight, green steel
+    boss:{skin:'#b08a68',uni:'#b0a070',uniD:'#6a5a3a',hat:'#ffd75e'}, // the Knight Lord, gold
+    dog:{skin:'#c09050',uni:'#8a5a2a',uniD:'#5a3a1a',hat:'#6a3a1a'}, // lion: tawny, dark mane
+  }[type]||{skin:'#b08a68',uni:'#8a8a8a',uniD:'#5a5a5a',hat:'#7a7a7a'};
   if(type==='dog'){
-    // profile, facing right: low, long, teeth showing
-    const gr=g.createLinearGradient(16,0,80,0); gr.addColorStop(0,P.skin); gr.addColorStop(1,P.uniD);
+    // a lion in profile, facing right: tawny, a big mane, a tail tuft, teeth showing
+    const gr=g.createLinearGradient(16,0,80,0); gr.addColorStop(0,P.skin); gr.addColorStop(1,P.uni);
     g.fillStyle=gr; g.beginPath(); g.ellipse(46,88,30,18,0,0,6.29); g.fill(); // body
     g.fillStyle='#0a0a0a'; g.fillRect(16,80,60,3); // dark back line
-    R(24,100,8,22,P.uniD); R(38,100,8,22,P.uni); R(54,100,8,22,P.uni); R(66,100,8,22,P.uniD); // legs
+    R(24,100,8,22,P.uni); R(38,100,8,22,P.skin); R(54,100,8,22,P.skin); R(66,100,8,22,P.uni); // legs
     R(20,118,10,4,'#0a0a0a'); R(34,118,10,4,'#0a0a0a'); R(50,118,10,4,'#0a0a0a'); R(62,118,10,4,'#0a0a0a'); // paws
-    C(72,66,14,P.skin); // skull
+    // the mane: a big dark ring around the head, the face inside it
+    C(70,64,20,P.hat); C(72,66,13,P.skin); // mane + face
     R(78,62,16,10,shade2(P.skin,0.85)); // snout
     R(90,64,4,4,'#0a0a0a'); // nose
     R(80,70,10,3,'#e8e8e8'); R(82,73,6,2,'#e8e8e8'); // teeth
-    g.fillStyle=P.uniD; g.beginPath(); g.moveTo(62,56); g.lineTo(58,42); g.lineTo(68,54); g.fill(); // ear, laid back
-    R(66,60,8,2,'#ff2222'); R(78,60,8,2,'#ff2222'); // red slit eyes
-    R(12,78,16,4,P.uniD); // tail, raised
+    g.fillStyle=P.hat; g.beginPath(); g.moveTo(62,52); g.lineTo(58,40); g.lineTo(68,50); g.fill(); // ear, in the mane
+    R(66,60,8,2,'#ffaa22'); R(78,60,8,2,'#ffaa22'); // amber eyes
+    R(12,78,16,4,P.uni); C(10,78,4,P.hat); // tail + tuft
     return c;
   }
   if(type==='nightmare'){
@@ -1268,53 +1321,47 @@ function drawEnemySprite(type){
     R(42,38,12,2,'#0a0a0a'); // grim mouth
     return c;
   }
-  // --- humanoid ---
-  OR(30,112,13,16,'#0e0e0e'); OR(53,112,13,16,'#0e0e0e'); // boots
-  OR(31,82,11,32,P.uniD); OR(54,82,11,32,P.uniD); // legs
-  // torso (uniform, left-lit, dark outline)
+  // --- knight: plate armour, a great helm, a crossbow ---
+  // (all human enemies are knights now; the crossbow is the ranged
+  // weapon — mechanically the same hitscan as the old rifle)
+  OR(30,112,13,16,'#0e0e0e'); OR(53,112,13,16,'#0e0e0e'); // sabatons
+  OR(31,82,11,32,P.uniD); OR(54,82,11,32,P.uniD); // greaves
+  // breastplate (steel, left-lit, dark outline) with a centre ridge
   const gr=g.createLinearGradient(24,0,72,0); gr.addColorStop(0,P.uni); gr.addColorStop(1,P.uniD);
   g.fillStyle='#0a0a0a'; g.fillRect(23,43,50,41);
   g.fillStyle=gr; g.fillRect(24,44,48,39);
-  OR(24,44,12,4,shade2(P.uni,1.25)); OR(60,44,12,4,shade2(P.uni,1.25)); // shoulder boards
-  g.fillStyle=P.uniD; g.beginPath(); g.moveTo(40,44); g.lineTo(48,54); g.lineTo(56,44); g.fill(); // collar V
-  OR(28,58,12,8,shade2(P.uni,0.85)); OR(56,58,12,8,shade2(P.uni,0.85)); // chest pockets
-  C(48,62,1.2,'#c8c8c8'); C(48,72,1.2,'#c8c8c8'); // buttons
+  R(46,44,4,39,shade2(P.uni,1.3)); // centre ridge
+  OR(24,44,12,4,shade2(P.uni,1.25)); OR(60,44,12,4,shade2(P.uni,1.25)); // pauldrons
   OR(24,79,48,5,'#0e0e0e'); R(44,79,8,5,'#8a7a4a'); // belt + buckle
+  R(58,76,4,14,'#c8c8c8'); R(54,74,12,3,'#8a7a4a'); // a sword at the hip: blade + crossguard
   OR(16,46,9,36,P.uniD); // left arm, down
   OR(66,50,9,28,P.uniD); // right arm, upper
   OR(58,72,16,7,P.uniD); // right forearm across the chest
-  // rifle across the lower chest, muzzle aimed at the viewer
+  // crossbow across the lower chest, the bolt aimed at the viewer
   OR(30,74,24,7,'#1a1a1a'); // stock
-  OR(52,70,10,10,'#222222'); // receiver
-  C(64,75,7,'#111111'); C(64,75,4,'#3a3a3a'); C(64,75,1.5,'#000000'); // muzzle ring + bore
-  // head (small), skin with a dark right-side shade
-  OR(35,18,26,26,P.skin);
-  R(52,18,9,26,'rgba(0,0,0,0.25)');
-  // face: heavy angled brows, slit eyes, nose shadow, grim mouth
-  g.fillStyle='#0a0a0a';
-  g.beginPath(); g.moveTo(38,26); g.lineTo(46,28); g.lineTo(46,30); g.lineTo(38,29); g.fill(); // left brow
-  g.beginPath(); g.moveTo(58,26); g.lineTo(50,28); g.lineTo(50,30); g.lineTo(58,29); g.fill(); // right brow
-  R(40,32,6,2,'#0a0a0a'); R(50,32,6,2,'#0a0a0a'); // slit eyes
-  R(47,34,2,6,'rgba(0,0,0,0.3)'); // nose shadow
-  R(42,41,12,1.5,'#0a0a0a'); // grim mouth
-  // headgear
-  if(type==='mutant'){
-    R(38,20,3,8,'rgba(0,0,0,0.4)'); R(54,22,3,6,'rgba(0,0,0,0.4)'); // scars
-    R(40,32,6,2,'#ff2222'); R(50,32,6,2,'#ff2222'); // red eyes
-    R(42,41,12,2,'#1a1a1a'); // wider grim mouth
-  } else if(type==='officer'||type==='boss'){
-    OR(32,10,32,10,P.hat); OR(30,18,36,4,P.hat); // peaked cap: crown + brim
-    R(30,18,36,2,'#000000'); // visor shadow
-    C(48,15,2,'#c8a84a'); // badge
-  } else {
-    g.fillStyle=P.hat; g.beginPath(); g.arc(48,20,15,Math.PI,0); g.fill(); // steel helmet dome
-    OR(30,18,36,4,P.hat); // brim
-    g.fillStyle='rgba(255,255,255,0.14)'; g.beginPath(); g.arc(42,12,6,Math.PI,0); g.fill(); // highlight
-  }
+  OR(52,70,10,10,'#222222'); // tiller
+  g.strokeStyle='#8a6a3a'; g.lineWidth=3; g.beginPath(); g.moveTo(56,66); g.quadraticCurveTo(74,74,56,84); g.stroke(); // the bow
+  C(64,75,4,'#3a3a3a'); C(64,75,1.5,'#000000'); // bolt tip
+  // head: a great helm — full steel, no skin, a horizontal visor slit
+  OR(35,18,26,26,P.hat);
+  R(35,18,26,3,shade2(P.hat,1.3)); // helm crown highlight
+  R(38,28,20,2,'#0a0a0a'); // visor slit
+  R(46,28,2,6,'#0a0a0a'); // breath slit
+  // helm crest / plume per rank
   if(type==='boss'){
+    R(44,4,8,12,'#ffd75e'); R(46,4,4,12,'#c8a84a'); // tall gold plume (the Knight Lord)
     OR(24,44,12,4,'#c8a84a'); OR(60,44,12,4,'#c8a84a'); // gold epaulettes
     C(40,68,2,'#c8a84a'); C(48,68,2,'#c8a84a'); C(56,68,2,'#c8a84a'); // medals
-    R(40,39,16,3,'#0a0a0a'); // moustache
+  } else if(type==='officer'){
+    R(44,6,8,10,'#c04040'); // red plume (Knight Captain)
+  } else if(type==='ss'){
+    R(44,6,8,10,'#1a1a1a'); // black plume (Dark Knight)
+    R(38,28,20,2,'#c04040'); // red visor glow
+  } else if(type==='mutant'){
+    R(44,6,8,10,'#6a8a3a'); // green plume (Hedge Knight)
+    R(38,28,20,2,'#ff2222'); // red visor slit
+  } else {
+    R(44,8,8,6,shade2(P.hat,1.2)); // plain steel crest
   }
   return c;
 }
@@ -1618,10 +1665,10 @@ function update(dt){
       // chase through doors: open them (T_Chase waits on doors in Wolf3D)
       const gx=Math.floor(e.x+Math.cos(e.ang)*0.6), gy=Math.floor(e.y+Math.sin(e.ang)*0.6);
       const dr=doorAt(gx,gy); if(dr&&dr.action==='closed'&&dr.lock===0) dr.action='opening';
-      // Melee (dog / Nightmare Demon): T_DogChase -> bite within MINACTORDIST
+      // Melee (lion / Nightmare Demon): T_DogChase -> bite within MINACTORDIST
       if((e.type==='dog'||e.type==='nightmare')&&d<WOLF.MINACTORDIST+0.4&&e.fire<=0){
         e.fire=0.9;
-        const nm=e.type==='nightmare'?'Nightmare Demon':'Dog';
+        const nm=e.type==='nightmare'?'Nightmare Demon':'Lion';
         if(rndT()<180){ hurtPlayer(e.type==='nightmare'?e.dmg:WOLF.shootDamage(1), nm.toLowerCase()+' bite'); log(nm+' bites!'); }
         else log(nm+' snaps and misses');
       }
@@ -1680,6 +1727,8 @@ function solidAt(x,y){
   if(gx<0||gy<0||gx>=mapW||gy>=mapH) return true;
   const t=grid[gy][gx];
   if(t===90) return !isDoorOpen(gx,gy);
+  const dg=diag[gy*64+gx];
+  if(dg>0) return diagSide(dg, x-gx, y-gy); // diagonal wall: solid only on its solid side
   return t>0;
 }
 function movePlayer(vx,vy){
@@ -1772,11 +1821,13 @@ function render(){
   const SW=scene.width, SH=scene.height, k=VW/1080;
   const projDist=(VW/2)/Math.tan(FOV/2);
   const horizon=SH/2 + Math.tan(pitch)*projDist;
-  // sky: a scrolling panorama above the horizon (the texture covers
-  // +/-45deg vertically, so 256px of sky = projDist*(pi/2) screen px,
-  // and its middle sits on the screen horizon). It scrolls with the
-  // view angle, like a real sky.
-  {
+  // ceiling: outdoors the sky IS the ceiling (a scrolling panorama
+  // above the horizon — the texture covers +/-45deg vertically, so 256px
+  // of sky = projDist*(pi/2) screen px, and its middle sits on the screen
+  // horizon). Indoors it is flat dark bands. The branch is by where the
+  // player stands, not per column.
+  const isOut=outdoor[Math.floor(player.y)*64+Math.floor(player.x)]===1;
+  if(isOut){
     const sky=SKY[themeIdx], skyW=sky.width, skyH=sky.height;
     const skyScale=projDist*(Math.PI/2)/skyH, skyPxH=skyH*skyScale, skyMid=skyH/2*skyScale;
     for(let ci=0;ci<nCols;ci++){
@@ -1784,6 +1835,13 @@ function render(){
       const a=player.ang + Math.atan((cx-SW/2)/projDist);
       let sx=((a/(2*Math.PI))*skyW)%skyW; if(sx<0) sx+=skyW;
       sctx.drawImage(sky, Math.floor(sx), 0, 1, skyH, ci*CHAR_W, horizon-skyMid, CHAR_W+1, skyPxH);
+    }
+  } else {
+    for(let y=0;y<SH;y+=4){
+      if(y+2>=horizon) break;
+      const d=(1-eyeZ)*projDist/Math.max(1,horizon-y);
+      sctx.fillStyle=shadeColor(theme.ceil, Math.min(11,d));
+      sctx.fillRect(0,y,SW,4);
     }
   }
   // floor: flat bands, shaded by distance from the eye (the sky
