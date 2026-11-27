@@ -175,11 +175,48 @@ function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(rng()*(
 // Then the cycle repeats. Each theme lists the wall texture types
 // it uses (walls:), OTEX-style.
 const THEMES=[
- {name:'UAC TECH BASE', ep:1, wall:['#7a8a9a','#5a6a7a','#8a9aa8','#6a7a8a'], floor:'#2a2e34', ceil:'#14161c', fog:'#05060a', walls:[4,9]},
- {name:"HELL'S GATE",   ep:2, wall:['#8a3a2a','#6a2a1a','#a04a2a','#7a3a3a'], floor:'#2e1a12', ceil:'#120a08', fog:'#080304', walls:[1,8]},
- {name:'GOTHIC',        ep:3, wall:['#6a6a7a','#4a4a5a','#8a7a4a','#5a5a6a'], floor:'#1e1e26', ceil:'#0e0e14', fog:'#050508', walls:[2,8]},
- {name:'ASTRAL',        ep:4, wall:['#c8b060','#e8d8a0','#b8a05a','#d8c888'], floor:'#3a3424', ceil:'#1e1c12', fog:'#0a0805', walls:[5,10]},
+ {name:'UAC TECH BASE', ep:1, wall:['#7a8a9a','#5a6a7a','#8a9aa8','#6a7a8a'], floor:'#2a2e34', ceil:'#14161c', fog:'#05060a', walls:[4,9],
+  sky:['#0a0e18','#1a2436','#2a3a4a'], cloud:'#3a4a5a'},
+ {name:"HELL'S GATE",   ep:2, wall:['#8a3a2a','#6a2a1a','#a04a2a','#7a3a3a'], floor:'#2e1a12', ceil:'#120a08', fog:'#080304',
+  sky:['#1a0505','#3a0a0a','#5a1a0a'], cloud:'#7a2a1a', walls:[1,8,11]},
+ {name:'GOTHIC',        ep:3, wall:['#6a6a7a','#4a4a5a','#8a7a4a','#5a5a6a'], floor:'#1e1e26', ceil:'#0e0e14', fog:'#050508', walls:[2,8,11],
+  sky:['#14141c','#33333e','#55555e'], cloud:'#7a7a88'},
+ {name:'ASTRAL',        ep:4, wall:['#c8b060','#e8d8a0','#b8a05a','#d8c888'], floor:'#3a3424', ceil:'#1e1c12', fog:'#0a0805', walls:[5,10],
+  sky:['#7a1a2a','#b83a4a','#e86a6a'], cloud:'#f8b8b8'},
 ];
+// --- sky: a scrolling 2048x256 panorama per theme (gradient + soft
+// cloud blobs). The sky texture covers +/-45 degrees vertically;
+// the renderer maps it so the texture's middle (the horizon) sits
+// on the screen horizon and it scrolls horizontally with the view.
+function makeSky(th){
+  const c=mkCanvas(2048,256), g=c.getContext('2d');
+  const gr=g.createLinearGradient(0,0,0,256);
+  gr.addColorStop(0, th.sky[0]); gr.addColorStop(0.55, th.sky[1]); gr.addColorStop(1, th.sky[2]);
+  g.fillStyle=gr; g.fillRect(0,0,2048,256);
+  const R=mulberry32(99);
+  for(let i=0;i<70;i++){ // soft cloud blobs, denser in the middle band
+    const cx=R()*2048, cy=60+R()*140, rx=60+R()*160, ry=10+R()*22;
+    const cg=g.createRadialGradient(cx,cy,4,cx,cy,rx);
+    cg.addColorStop(0, th.cloud); cg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.globalAlpha=0.12+R()*0.25; g.fillStyle=cg;
+    g.beginPath(); g.ellipse(cx,cy,rx,ry,0,0,6.29); g.fill();
+  }
+  g.globalAlpha=1;
+  return c;
+}
+const SKY=THEMES.map(th=>makeSky(th));
+// --- floor grain: a subtle speckle tile, so the floor is not a flat
+// gradient. Drawn over the floor region at very low alpha.
+function makeNoise(){
+  const c=mkCanvas(128,128), g=c.getContext('2d');
+  const R=mulberry32(7);
+  for(let i=0;i<900;i++){
+    g.fillStyle=R()<0.5?'rgba(0,0,0,0.5)':'rgba(255,255,255,0.4)';
+    g.fillRect(R()*128, R()*128, 1+R()*2, 1+R()*2);
+  }
+  return c;
+}
+const NOISE=makeNoise();
 // Walls: the ojread/ascii-fps trick (github.com/ojread/ascii-fps) —
 // one character per ray column, stretched vertically to the wall's
 // full height at its regular width. The character is pre-rendered
@@ -197,6 +234,14 @@ function makeWallTex(base, type){
   const c=mkCanvas(64,64), g=c.getContext('2d');
   const R=mulberry32(type*7919+13); // stable per-type variation
   const blk=(x,y,w,h,f)=>{ g.fillStyle=shade2(base,f); g.fillRect(x,y,w,h); };
+  // Eviternity glow: a bright core strip with a soft halo behind it
+  const glowStrip=(x,w,color)=>{ g.fillStyle=color; g.globalAlpha=0.25; g.fillRect(x-3,0,w+6,64);
+    g.globalAlpha=1; g.fillRect(x,0,w,64); };
+  const goldRune=(x,y,r)=>{ // 8-pointed gold star, like the runes in Eviternity's halls
+    g.strokeStyle='#ffd75e'; g.lineWidth=1.5;
+    for(let a=0;a<4;a++){ const an=a*Math.PI/4;
+      g.beginPath(); g.moveTo(x-Math.cos(an)*r, y-Math.sin(an)*r);
+      g.lineTo(x+Math.cos(an)*r, y+Math.sin(an)*r); g.stroke(); } };
   if(type===1){ // brick: 4 courses of 16px bricks, offset rows
     g.fillStyle=shade2(base,0.45); g.fillRect(0,0,64,64); // mortar
     for(let row=0;row<4;row++){ const off=(row%2)*8;
@@ -229,18 +274,23 @@ function makeWallTex(base, type){
       g.fillStyle='rgba(255,255,255,0.25)'; g.fillRect(bx+1, row*16+1, 14, 2);
       g.fillStyle='rgba(0,0,0,0.3)'; g.fillRect(bx+1, row*16+13, 14, 2);
     }
-  } else if(type===6){ // Wolf3D sliding door: frame, panels, barred window, handle
+  } else if(type===6){ // Wolf3D sliding door: frame, glowing gold portal, barred window, handle
     g.fillStyle=shade2(base,0.5); g.fillRect(0,0,64,64);
     g.fillStyle=shade2(base,0.75); g.fillRect(4,4,56,56);
-    g.fillStyle=shade2(base,0.55); g.fillRect(10,10,20,44); g.fillRect(34,10,20,44);
+    const pg=g.createLinearGradient(10,0,54,0); // lit doorway: gold glow
+    pg.addColorStop(0,'#8a6a1a'); pg.addColorStop(0.5,'#ffd75e'); pg.addColorStop(1,'#8a6a1a');
+    g.fillStyle=pg; g.fillRect(10,10,44,44);
+    g.fillStyle='rgba(255,215,94,0.35)'; g.fillRect(10,10,44,3); // top glow
     g.fillStyle='#111'; g.fillRect(22,8,20,10); // window
     g.fillStyle='#888'; g.fillRect(26,8,2,10); g.fillRect(34,8,2,10); // bars
     g.fillStyle='#ddd'; g.beginPath(); g.arc(56,36,3,0,6.29); g.fill(); // handle
     g.fillStyle='rgba(0,0,0,0.35)'; g.fillRect(31,4,2,56); // centre seam
-  } else if(type===8){ // gothic arch: columns + a pointed arch
+  } else if(type===8){ // gothic arch: columns, glowing teal strips, gold runes
     g.fillStyle=shade2(base,0.5); g.fillRect(0,0,64,64);
     for(let row=0;row<4;row++) for(let bx=0;bx<64;bx+=16) blk(bx+1,row*16+1,14,14,0.8+R()*0.25);
     g.fillStyle=shade2(base,1.3); g.fillRect(6,0,6,64); g.fillRect(52,0,6,64); // columns
+    glowStrip(14,3,'#3affc8'); glowStrip(47,3,'#3affc8'); // glowing teal inlay
+    goldRune(32,22,6); goldRune(32,48,5); // gold runes
     g.fillStyle='rgba(0,0,0,0.5)'; g.beginPath(); g.moveTo(18,64); g.lineTo(18,28); g.lineTo(32,8); g.lineTo(46,28); g.lineTo(46,64); g.fill(); // arch opening
     g.fillStyle=shade2(base,1.5); g.fillRect(30,6,4,4); // keystone
   } else if(type===9){ // tech panel: clean plates, glowing trim, vent
@@ -254,11 +304,19 @@ function makeWallTex(base, type){
     for(let vy=40;vy<58;vy+=4) g.fillRect(36,vy,24,2); // vent grille
   } else if(type===10){ // astral marble: bright, gold veins, soft glow
     g.fillStyle=shade2(base,1.1); g.fillRect(0,0,64,64);
-    g.fillStyle='rgba(255,255,255,0.25)'; g.fillRect(0,0,64,10); // top glow
+    g.fillStyle='rgba(255,215,94,0.28)'; g.fillRect(0,0,64,10); // top gold glow
+    goldRune(32,32,7); // gold rune in the marble
     g.strokeStyle='#ffd75e'; g.lineWidth=1.5;
     g.beginPath(); g.moveTo(0,50); g.lineTo(22,30); g.lineTo(40,44); g.lineTo(64,18); g.stroke(); // gold vein
     g.beginPath(); g.moveTo(10,64); g.lineTo(30,40); g.lineTo(50,58); g.stroke();
     g.fillStyle='rgba(0,0,0,0.15)'; g.fillRect(0,60,64,4);
+  } else if(type===11){ // pillar: dark stone column, glowing teal strips (Eviternity's halls)
+    g.fillStyle=shade2(base,0.35); g.fillRect(0,0,64,64);
+    for(let row=0;row<4;row++) for(let bx=0;bx<64;bx+=16) blk(bx+1,row*16+1,14,14,0.7+R()*0.2);
+    g.fillStyle=shade2(base,1.2); g.fillRect(4,0,8,64); g.fillRect(52,0,8,64); // fluted edges
+    glowStrip(20,4,'#3affc8'); glowStrip(40,4,'#3affc8'); // twin glowing inlays
+    goldRune(32,32,6);
+    g.fillStyle='rgba(255,255,255,0.15)'; g.fillRect(0,0,64,3); g.fillRect(0,61,64,3);
   } else { // pushwall: carved stone with a statue face
     g.fillStyle=shade2(base,0.4); g.fillRect(0,0,64,64);
     for(let row=0;row<4;row++) for(let bx=0;bx<64;bx+=16) blk(bx+1,row*16+1,14,14,0.8+R()*0.3);
@@ -269,10 +327,10 @@ function makeWallTex(base, type){
   }
   return c;
 }
-// WALL_TEX[themeIdx][type][shadeLevel] — 4 themes x 10 types x 4 levels
+// WALL_TEX[themeIdx][type][shadeLevel] — 4 themes x 11 types x 4 levels
 const WALL_TEX=THEMES.map(th=>{
   const per={};
-  for(let t=1;t<=10;t++){
+  for(let t=1;t<=11;t++){
     const base=makeWallTex(th.wall[(t-1)%th.wall.length], t);
     const levels=[base];
     for(const a of [0.3,0.55,0.75]){
@@ -605,7 +663,7 @@ function genLevel(d){
   // Wolf3D: MAPSIZE 64 — maps are forced 64x64 (WL_GAME.C SetupGameLevel)
   mapW=WOLF.MAPSIZE; mapH=WOLF.MAPSIZE;
   grid=[]; for(let y=0;y<mapH;y++){ grid.push(new Array(mapW).fill(1)); }
-  doors=[]; pushwalls=[]; items=[]; enemyShots=[];
+  doors=[]; pushwalls=[]; items=[]; enemyShots=[]; decor=[];
   // Eviternity scale: one grand hall per floor — carved FIRST so it
   // always gets a spot (a huge arena, 2.5 ceiling, a platform, a pack).
   let grandHall=null;
@@ -719,6 +777,9 @@ function genLevel(d){
     for(let yy=grandHall.y;yy<grandHall.y+grandHall.h;yy++) for(let xx=grandHall.x;xx<grandHall.x+grandHall.w;xx++)
       if(grid[yy][xx]===0) ceilH[yy*64+xx]=2.5;
     raiseRect(grandHall.cx-2, grandHall.cy-1, 4, 3);
+    // pillars at the grand hall's corners (Eviternity's pillared halls)
+    for(const [px,py] of [[grandHall.x+1,grandHall.y+1],[grandHall.x+grandHall.w-2,grandHall.y+1],[grandHall.x+1,grandHall.y+grandHall.h-2],[grandHall.x+grandHall.w-2,grandHall.y+grandHall.h-2]])
+      decor.push({x:px+0.5, y:py+0.5, kind:'pillar', scale:1.4});
   }
   enemies=[];
   const nE=Math.min(12+d*4, 55); // Eviternity: bigger fights
@@ -758,6 +819,14 @@ function genLevel(d){
   }
   // gold key (bo_key1) — Hans drops it too; one is placed so the locked
   // door on this floor can be opened
+  // trees in the Astral + Gothic rooms (Eviternity's gardens)
+  if(theme.ep===3||theme.ep===4){
+    const treeRooms=rooms.filter(r=>r!==rooms[0]&&r!==far&&r!==grandHall&&r.w>=4&&r.h>=4);
+    for(let i=0;i<Math.min(3, treeRooms.length);i++){
+      const r=pick(treeRooms);
+      decor.push({x:r.cx+rr(-1,1), y:r.cy+rr(-1,1), kind:'tree', scale:1.1});
+    }
+  }
   if(d>1){ const r=pick(rooms.slice(1)); items.push({x:r.cx+0.5,y:r.cy+0.5,kind:'key1'}); }
   log('EPISODE '+theme.ep+' — '+theme.name+' — FLOOR '+d+' — '+rooms.length+' rooms, '+enemies.length+' hostiles, '+doors.length+' doors. Seed '+(runSeed+d*7919));
   if(audioUnlocked) startMusic(d%3===0?'boss':theme.ep===4?'astral':'combat'); // boss floors get the fast track, Astral episode gets the astral track
@@ -818,6 +887,7 @@ function castRay(angle, wantPath){
 let shootCd=0, ctrlEdge=false, hurtBobT=-99; // hurtBobT: bobT when last hurt (HUD face grimace)
 let projectiles=[]; // player projectiles (rocket / plasma / BFG ball)
 let enemyShots=[]; // Eviternity: Astral Cacodemon + Annihilator fireballs
+let decor=[]; // Eviternity decor: pillars in the grand hall, trees in Astral/Gothic rooms
 let hookCd=0, hookT=0, hookTarget=null; // Doom Eternal meat hook
 // --- Doom Eternal Super Shotgun meat hook ---
 // F (gamepad X, HOOK button) with the Super Shotgun equipped: fires a
@@ -1081,6 +1151,30 @@ function best(){
 // offscreen canvases). Doom itself uses billboard sprites, not polygon
 // models — same idea here: a shaded figure that always faces the
 // player, clipped per column against the wall z-buffer.
+// --- decor sprites: a glowing pillar and a tree, for the grand hall
+// and the Astral/Gothic rooms (Eviternity's halls and gardens).
+function drawPillarSprite(){
+  const c=mkCanvas(96,128), g=c.getContext('2d');
+  g.fillStyle='#2a2a30'; g.fillRect(28,0,40,128); // column
+  g.fillStyle='#3a3a44'; g.fillRect(28,0,6,128); g.fillRect(62,0,6,128); // flutes
+  g.fillStyle='#3affc8'; g.fillRect(40,8,4,112); g.fillRect(52,8,4,112); // glowing teal inlays
+  g.fillStyle='rgba(58,255,200,0.3)'; g.fillRect(36,8,12,112); g.fillRect(48,8,12,112); // halo
+  g.fillStyle='#ffd75e'; g.beginPath(); g.arc(48,64,7,0,6.29); g.fill(); // gold rune boss
+  g.fillStyle='#111'; g.beginPath(); g.arc(48,64,3,0,6.29); g.fill();
+  g.fillStyle='#4a4a54'; g.fillRect(20,0,56,10); g.fillRect(20,118,56,10); // capital + base
+  return c;
+}
+function drawTreeSprite(){
+  const c=mkCanvas(96,128), g=c.getContext('2d');
+  g.fillStyle='#5a3a22'; g.fillRect(44,70,8,58); // trunk
+  g.fillStyle='#3a2a18'; g.fillRect(40,90,16,6); // root flare
+  const blob=(x,y,r,col)=>{ g.fillStyle=col; g.beginPath(); g.arc(x,y,r,0,6.29); g.fill(); };
+  blob(48,52,30,'#1a4a2a'); blob(30,66,20,'#1a4a2a'); blob(66,66,20,'#1a4a2a'); // dark canopy
+  blob(48,44,22,'#2a6a3a'); blob(34,58,14,'#2a6a3a'); blob(62,58,14,'#2a6a3a'); // lighter top
+  blob(48,38,10,'#3a8a4a'); // sunlit crown
+  return c;
+}
+const DECOR_SPR={ pillar:shadeLevels(drawPillarSprite()), tree:shadeLevels(drawTreeSprite()) };
 function shade2(hex, f){ // multiply an #rrggbb color by f (0..1)
   const n=parseInt(hex.slice(1),16);
   const r=Math.min(255,Math.round(((n>>16)&255)*f)), g=Math.min(255,Math.round(((n>>8)&255)*f)), b=Math.min(255,Math.round((n&255)*f));
@@ -1678,13 +1772,31 @@ function render(){
   const SW=scene.width, SH=scene.height, k=VW/1080;
   const projDist=(VW/2)/Math.tan(FOV/2);
   const horizon=SH/2 + Math.tan(pitch)*projDist;
-  // floor + ceiling: flat bands, shaded by distance from the eye
+  // sky: a scrolling panorama above the horizon (the texture covers
+  // +/-45deg vertically, so 256px of sky = projDist*(pi/2) screen px,
+  // and its middle sits on the screen horizon). It scrolls with the
+  // view angle, like a real sky.
+  {
+    const sky=SKY[themeIdx], skyW=sky.width, skyH=sky.height;
+    const skyScale=projDist*(Math.PI/2)/skyH, skyPxH=skyH*skyScale, skyMid=skyH/2*skyScale;
+    for(let ci=0;ci<nCols;ci++){
+      const cx=ci*CHAR_W + CHAR_W/2;
+      const a=player.ang + Math.atan((cx-SW/2)/projDist);
+      let sx=((a/(2*Math.PI))*skyW)%skyW; if(sx<0) sx+=skyW;
+      sctx.drawImage(sky, Math.floor(sx), 0, 1, skyH, ci*CHAR_W, horizon-skyMid, CHAR_W+1, skyPxH);
+    }
+  }
+  // floor: flat bands, shaded by distance from the eye (the sky
+  // covers the ceiling now, so only the floor is banded)
   for(let y=0;y<SH;y+=4){
-    const ceil=y+2<horizon;
-    const d=ceil?(1-eyeZ)*projDist/Math.max(1,horizon-y):eyeZ*projDist/Math.max(1,y-horizon);
-    sctx.fillStyle=shadeColor(ceil?theme.ceil:theme.floor, Math.min(11,d));
+    if(y+2<horizon) continue;
+    const d=eyeZ*projDist/Math.max(1,y-horizon);
+    sctx.fillStyle=shadeColor(theme.floor, Math.min(11,d));
     sctx.fillRect(0,y,SW,4);
   }
+  // floor grain: a whisper of speckle over the floor region
+  if(horizon<SH){ sctx.globalAlpha=0.05; sctx.fillStyle=sctx.createPattern(NOISE,'repeat');
+    sctx.fillRect(0,horizon,SW,SH-horizon); sctx.globalAlpha=1; }
   // walls: Doom-style textured slices — one ray per column, one
   // 1px-wide slice of a 64x64 texture stretched to the wall's height
   // (nearest-neighbour, so it stays crunchy). The wall's base and top
@@ -1722,6 +1834,7 @@ function render(){
   // z-buffer clipping against the walls
   const sprs=[];
   for(const it of items) if(!it.taken&&ITEM_SPR[it.kind]) sprs.push({x:it.x,y:it.y,cv:ITEM_SPR[it.kind],scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
+  for(const dc of decor) sprs.push({x:dc.x,y:dc.y,cv:DECOR_SPR[dc.kind],scale:dc.scale||1,dist:Math.hypot(dc.x-player.x,dc.y-player.y)});
   for(const e of enemies) if(!e.dead) sprs.push({x:e.x,y:e.y,cv:ENEMY_SPR[e.type]||ENEMY_SPR.guard,scale:(e.type==='boss'||e.type==='annihilator')?1.6:e.type==='astral'?1.2:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e),stag:e.staggered,flash:e.flash,hover:ENEMY_TYPES[e.type].hover||0,flick:e.type==='nightmare'});
   for(const pr of projectiles) sprs.push({x:pr.x,y:pr.y,proj:pr.kind,scale:0.5,dist:Math.hypot(pr.x-player.x,pr.y-player.y)});
   for(const sh of enemyShots) sprs.push({x:sh.x,y:sh.y,proj:sh.kind,scale:0.5,dist:Math.hypot(sh.x-player.x,sh.y-player.y)});

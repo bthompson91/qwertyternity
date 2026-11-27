@@ -1,6 +1,6 @@
 # QWERTYTERNITY
 
-An Eviternity-style raycaster running entirely in the browser. No build step, no libraries — one `index.html` (plus a Google Fonts link for the HUD typeface). It started life as QWERTYSTEIN (a Wolfenstein-style raycaster); it is now QWERTYTERNITY — Doom, but bigger, in the spirit of Eviternity: epic scale, grand halls, new monsters, and a heavenly Astral episode. Walls are Doom-style 64×64 texture slices, enemies are drawn sprites, and the floors have Doom-style sector heights (raised platforms, a boss dais).
+An Eviternity-style raycaster running entirely in the browser. No build step, no libraries — one `index.html` (plus a Google Fonts link for the HUD typeface). It started life as QWERTYSTEIN (a Wolfenstein-style raycaster); it is now QWERTYTERNITY — Doom, but bigger, in the spirit of Eviternity: epic scale, grand halls, new monsters, and a heavenly Astral episode. Walls are Doom-style 64×64 texture slices, enemies are drawn sprites, and the floors have Doom-style sector heights (raised platforms, a boss dais). And it looks the part now: every episode has its own scrolling sky (the Astral episode's is a pink cloudy heaven), the walls carry glowing teal inlay and gold runes, the grand halls have glowing pillars, and the Astral and Gothic rooms have trees.
 
 Play it live: https://bthompson91.github.io/qwertyternity/
 
@@ -45,7 +45,7 @@ Floors run in **Eviternity episodes**, one theme per 4 floors: **Episode 1 — U
 
 ## Tech
 
-Raycasting (DDA, one ray per character column, fisheye-corrected) drawn straight to a canvas. Walls are Doom-style 64×64 texture slices — brick, stone, wood, metal, vault, door, pushwall — one 1px-wide slice per ray column, pre-baked in 4 distance-shade levels and drawn nearest-neighbour so they stay crunchy. (The earlier ojread/ascii-fps stretched-character walls shimmered: the dithered glyphs moiré'd as they scaled and fractional column widths left seams, so they were replaced with real textures.) Floors have Doom sector heights: 1–2 raised platforms per floor (a 0.5 step you walk straight up) in tall rooms, and a dais under the boss on every 3rd floor — your eye rides the floor you're standing on, walls take their base and ceiling from the room you're in, and the floor is redrawn in strips where the height changes so the step faces read as dark risers. Enemies are drawn 3D-style billboard sprites (muted colours, hard dark outline, slit eyes under heavy brows, rifle aimed at you), clipped per column against the wall depth buffer, with HP bars and a "!" when staggered; guns are Doom-style drawn viewmodel sprites with a muzzle flash. The scene is rendered to an offscreen canvas larger than the view (overscan) and view-bob just pans the window inside it, so bobbing never exposes a black border. The HUD is drawn in Bungee Tint. The minimap is a rotating radar (player facing is up) with fog of war, top-left, half the old size.
+Raycasting (DDA, one ray per character column, fisheye-corrected) drawn straight to a canvas. Walls are Doom-style 64×64 texture slices — brick, stone, wood, metal, vault, door, pushwall — one 1px-wide slice per ray column, pre-baked in 4 distance-shade levels and drawn nearest-neighbour so they stay crunchy. (The earlier ojread/ascii-fps stretched-character walls shimmered: the dithered glyphs moiré'd as they scaled and fractional column widths left seams, so they were replaced with real textures.) Above the walls, the ceiling is a scrolling sky panorama — a 2048×256 texture per episode, gradient + soft clouds, that pans with your view and sits on the horizon: dark blue-grey for the tech base, blood-red for Hell, grey cloud for Gothic, and a pink cloudy heaven for Astral. The floor is a distance-shaded band with a whisper of speckle grain. Floors have Doom sector heights: 1–2 raised platforms per floor (a 0.5 step you walk straight up) in tall rooms, and a dais under the boss on every 3rd floor — your eye rides the floor you're standing on, walls take their base and ceiling from the room you're in, and the floor is redrawn in strips where the height changes so the step faces read as dark risers. Enemies are drawn 3D-style billboard sprites (muted colours, hard dark outline, slit eyes under heavy brows, rifle aimed at you), clipped per column against the wall depth buffer, with HP bars and a "!" when staggered; guns are Doom-style drawn viewmodel sprites with a muzzle flash. The scene is rendered to an offscreen canvas larger than the view (overscan) and view-bob just pans the window inside it, so bobbing never exposes a black border. The HUD is drawn in Bungee Tint. The minimap is a rotating radar (player facing is up) with fog of war, top-left, half the old size.
 
 ## Wolfenstein 3D logic
 
@@ -101,8 +101,12 @@ barred window, a pushwall with a carved statue face), tinted from the
 floor theme's palette, drawn one 1px-wide slice per ray column and
 nearest-neighbour so they stay crunchy. Each Eviternity episode has
 its own OTEX-style textures: the tech base uses clean panels with a
-glowing trim, Hell and Gothic use a pointed-arch gothic texture, and
-the Astral episode uses bright marble with gold veins. Enemies and guns are drawn
+glowing trim, Hell and Gothic use a pointed-arch gothic texture and a
+pillar texture — dark stone columns with glowing teal inlay and a gold
+rune — and the Astral episode uses bright marble with gold veins and a
+gold rune. The door is a glowing gold portal. The grand hall on every
+floor has four glowing pillars at its corners, and the Astral and
+Gothic rooms have trees. Enemies and guns are drawn
 sprites, not ASCII: muted, dark-outlined figures for guard, officer,
 SS, dog (in profile, teeth showing), mutant and Hans Grosse — slit
 eyes under heavy brows, a rifle aimed at the viewer — plus Eviternity's
