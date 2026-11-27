@@ -1356,10 +1356,28 @@ function shade2(hex, f){ // multiply an #rrggbb color by f (0..1)
 }
 function mkCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
 function drawEnemySprite(type){
-  // 96x128. Doom-style, not cartoon: muted colours, a hard dark
-  // outline, a small head, shadowed slit eyes under heavy angled
-  // brows, a rifle held across the chest and aimed at the viewer.
-  const c=mkCanvas(96,128), g=c.getContext('2d');
+  // 96x128 output, drawn at half resolution (48x64) and upscaled
+  // nearest-neighbour, so the pixels are chunky 2x2 blocks — Doom's
+  // sprites are low-res photographs of clay models, retouched pixel
+  // by pixel: chunky, fleshy, mottled, high-contrast, one dominant
+  // hue per monster. The old flat vector icons are gone.
+  const c=mkCanvas(96,128), out=c.getContext('2d');
+  const sc=mkCanvas(48,64), g=sc.getContext('2d');
+  g.scale(0.5,0.5); // all the coordinates below are in the 96x128 space
+  const rng=mulberry32(type.length*7919+type.charCodeAt(0)*131+7); // stable per type
+  const mottle=(x,y,w,h,n)=>{ // grainy flesh: seeded dark/light speckles
+    for(let i=0;i<n;i++){
+      const px=x+rng()*w, py=y+rng()*h;
+      g.fillStyle=rng()<0.6?'rgba(0,0,0,0.22)':'rgba(255,255,255,0.10)';
+      g.fillRect(px|0, py|0, 2, 2);
+    }
+  };
+  const finish=()=>{ // mottle the whole body, then upscale chunky
+    mottle(10,10,76,116,260);
+    out.imageSmoothingEnabled=false;
+    out.drawImage(sc,0,0,96,128);
+    return c;
+  };
   const R=(x,y,w,h,col)=>{ g.fillStyle=col; g.fillRect(x,y,w,h); };
   const C=(x,y,r,col)=>{ g.fillStyle=col; g.beginPath(); g.arc(x,y,r,0,6.29); g.fill(); };
   const OR=(x,y,w,h,col)=>{ // outlined rect: dark border, coloured fill
@@ -1389,7 +1407,7 @@ function drawEnemySprite(type){
     g.fillStyle=P.hat; g.beginPath(); g.moveTo(62,52); g.lineTo(58,40); g.lineTo(68,50); g.fill(); // ear, in the mane
     R(66,60,8,2,'#ffaa22'); R(78,60,8,2,'#ffaa22'); // amber eyes
     R(12,78,16,4,P.uni); C(10,78,4,P.hat); // tail + tuft
-    return c;
+    return finish();
   }
   if(type==='nightmare'){
     // Eviternity's Nightmare Demon: a dark teal Demon/Pinky, 2x the HP,
@@ -1408,7 +1426,7 @@ function drawEnemySprite(type){
     g.fillStyle='#0a3a32'; g.beginPath(); g.moveTo(36,32); g.lineTo(32,16); g.lineTo(42,28); g.fill();
     g.beginPath(); g.moveTo(60,32); g.lineTo(64,16); g.lineTo(54,28); g.fill(); // horns
     g.strokeStyle='#0a3a32'; g.lineWidth=4; g.beginPath(); g.moveTo(28,90); g.quadraticCurveTo(8,100,14,118); g.stroke(); // the tail
-    return c;
+    return finish();
   }
   if(type==='astral'){
     // Eviternity's Astral Cacodemon: a floating GREY sphere, one eye,
@@ -1427,7 +1445,7 @@ function drawEnemySprite(type){
     g.fillStyle='#5a5a5a'; g.fillRect(12,72,8,14); g.fillRect(76,72,8,14); // little arms
     // cybernetic trim: a teal ring around the body (Eviternity II's cyber-astral look)
     g.strokeStyle='#3affc8'; g.lineWidth=1.5; g.beginPath(); g.arc(48,72,28,0.6,2.5); g.stroke();
-    return c;
+    return finish();
   }
   if(type==='annihilator'){
     // Eviternity's Annihilator: a bulkier, horned Baron — dark red,
@@ -1451,7 +1469,7 @@ function drawEnemySprite(type){
     g.beginPath(); g.moveTo(62,22); g.lineTo(80,4); g.lineTo(72,28); g.lineTo(62,30); g.fill(); // huge curved horns
     C(42,30,3,'#44ff44'); C(54,30,3,'#44ff44'); // green glowing eyes
     R(42,38,12,2,'#0a0a0a'); // grim mouth
-    return c;
+    return finish();
   }
   if(type==='imp'){
     // Doom Eternal's Imp: a small, hunched brown demon, spikes down its
@@ -1469,7 +1487,7 @@ function drawEnemySprite(type){
     g.beginPath(); g.moveTo(58,34); g.lineTo(62,20); g.lineTo(52,30); g.fill(); // little horns
     g.fillStyle='#c8b060'; // the spikes down its back
     for(let sy=60;sy<=86;sy+=8){ g.beginPath(); g.moveTo(30,sy); g.lineTo(22,sy+4); g.lineTo(30,sy+8); g.fill(); }
-    return c;
+    return finish();
   }
   if(type==='pinky'){
     // Doom Eternal's Pinky: a bulky pink demon, a huge mouth full of
@@ -1489,7 +1507,7 @@ function drawEnemySprite(type){
     g.fillStyle='#802040'; g.beginPath(); g.moveTo(36,30); g.lineTo(32,16); g.lineTo(42,26); g.fill();
     g.beginPath(); g.moveTo(60,30); g.lineTo(64,16); g.lineTo(54,26); g.fill(); // horns
     g.fillStyle='rgba(0,0,0,0.35)'; g.fillRect(20,80,56,4); // belly shadow
-    return c;
+    return finish();
   }
   if(type==='mancubus'){
     // Doom Eternal's Mancubus: a huge, fat orange-tan demon with a
@@ -1509,7 +1527,7 @@ function drawEnemySprite(type){
     g.fillStyle='#7a4a20'; g.beginPath(); g.moveTo(38,30); g.lineTo(34,18); g.lineTo(44,26); g.fill();
     g.beginPath(); g.moveTo(58,30); g.lineTo(62,18); g.lineTo(52,26); g.fill(); // horns
     g.fillStyle='rgba(0,0,0,0.3)'; g.fillRect(24,96,48,6); // belly shadow
-    return c;
+    return finish();
   }
   if(type==='hellknight'){
     // Doom Eternal's Hell Knight: a big, muscular demon, dark green-gold
@@ -1528,7 +1546,7 @@ function drawEnemySprite(type){
     g.beginPath(); g.moveTo(34,32); g.quadraticCurveTo(20,20,28,8); g.lineTo(34,16); g.quadraticCurveTo(28,24,38,30); g.fill();
     g.beginPath(); g.moveTo(62,32); g.quadraticCurveTo(76,20,68,8); g.lineTo(62,16); g.quadraticCurveTo(68,24,58,30); g.fill();
     R(28,56,40,3,'rgba(255,255,255,0.2)'); // top highlight on the muscle
-    return c;
+    return finish();
   }
   if(type==='revenant'){
     // Doom Eternal's Revenant: a tall, skeletal demon, pale bone, a
@@ -1548,7 +1566,7 @@ function drawEnemySprite(type){
     R(44,48,8,3,'#0a0a0a'); // teeth slit
     g.fillStyle='#8a8a7a'; g.beginPath(); g.moveTo(38,30); g.lineTo(34,18); g.lineTo(44,26); g.fill();
     g.beginPath(); g.moveTo(58,30); g.lineTo(62,18); g.lineTo(52,26); g.fill(); // horns
-    return c;
+    return finish();
   }
   if(type==='cyberdemon'){
     // Doom Eternal's Cyberdemon: a huge, grey-brown demon, cybernetic —
@@ -1570,7 +1588,7 @@ function drawEnemySprite(type){
     g.beginPath(); g.moveTo(34,30); g.quadraticCurveTo(18,16,28,4); g.lineTo(36,12); g.quadraticCurveTo(28,22,40,28); g.fill();
     g.beginPath(); g.moveTo(62,30); g.quadraticCurveTo(78,16,68,4); g.lineTo(60,12); g.quadraticCurveTo(68,22,56,28); g.fill();
     R(24,56,48,3,'rgba(255,255,255,0.25)'); // hard top highlight
-    return c;
+    return finish();
   }
   // --- knight: plate armour, a great helm, a crossbow ---
   // (all human enemies are knights now; the crossbow is the ranged
@@ -1620,7 +1638,7 @@ function drawEnemySprite(type){
   } else {
     R(44,8,8,6,shade2(P.hat,1.2)); // plain steel crest
   }
-  return c;
+  return finish();
 }
 function drawGunSprite(key){
   // Doom-style viewmodel, 240x180, weapon centered, muzzle at top.
