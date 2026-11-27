@@ -1355,15 +1355,23 @@ function shade2(hex, f){ // multiply an #rrggbb color by f (0..1)
   return 'rgb('+r+','+g+','+b+')';
 }
 function mkCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
-function drawEnemySprite(type){
+function drawEnemySprite(type, frame){
   // 96x128 output, drawn at half resolution (48x64) and upscaled
   // nearest-neighbour, so the pixels are chunky 2x2 blocks — Doom's
   // sprites are low-res photographs of clay models, retouched pixel
   // by pixel: chunky, fleshy, mottled, high-contrast, one dominant
   // hue per monster. The old flat vector icons are gone.
+  // Frames (Doom-style): 0 = walk A, 1 = walk B, 2 = attack (lunge),
+  // 3 = pain (recoil). Walk: the body bobs and the legs alternate.
+  frame=frame||0;
+  const legL=frame===0?4:frame===1?-4:0; // left-leg y offset (walk)
+  const legR=frame===0?-4:frame===1?4:0; // right-leg y offset (walk)
+  const bob=frame===0?-2:frame===1?2:frame===2?-3:1; // whole-body y
+  const lean=frame===3?-4:0; // pain recoil (x)
   const c=mkCanvas(96,128), out=c.getContext('2d');
   const sc=mkCanvas(48,64), g=sc.getContext('2d');
   g.scale(0.5,0.5); // all the coordinates below are in the 96x128 space
+  g.translate(lean, bob); // the walk bob / attack lunge / pain recoil
   const rng=mulberry32(type.length*7919+type.charCodeAt(0)*131+7); // stable per type
   const mottle=(x,y,w,h,n)=>{ // grainy flesh: seeded dark/light speckles
     for(let i=0;i<n;i++){
@@ -1397,8 +1405,8 @@ function drawEnemySprite(type){
     const gr=g.createLinearGradient(16,0,80,0); gr.addColorStop(0,P.skin); gr.addColorStop(1,P.uni);
     g.fillStyle=gr; g.beginPath(); g.ellipse(46,88,30,18,0,0,6.29); g.fill(); // body
     g.fillStyle='#0a0a0a'; g.fillRect(16,80,60,3); // dark back line
-    R(24,100,8,22,P.uni); R(38,100,8,22,P.skin); R(54,100,8,22,P.skin); R(66,100,8,22,P.uni); // legs
-    R(20,118,10,4,'#0a0a0a'); R(34,118,10,4,'#0a0a0a'); R(50,118,10,4,'#0a0a0a'); R(62,118,10,4,'#0a0a0a'); // paws
+    R(24,100+legL,8,22,P.uni); R(38,100+legR,8,22,P.skin); R(54,100+legL,8,22,P.skin); R(66,100+legR,8,22,P.uni); // legs
+    R(20,118+legL,10,4,'#0a0a0a'); R(34,118+legR,10,4,'#0a0a0a'); R(50,118+legL,10,4,'#0a0a0a'); R(62,118+legR,10,4,'#0a0a0a'); // paws
     // the mane: a big dark ring around the head, the face inside it
     C(70,64,20,P.hat); C(72,66,13,P.skin); // mane + face
     R(78,62,16,10,shade2(P.skin,0.85)); // snout
@@ -1417,7 +1425,7 @@ function drawEnemySprite(type){
     // recognisable Eviternity enemy.
     const gr=g.createLinearGradient(24,0,72,0); gr.addColorStop(0,'#0a3a32'); gr.addColorStop(1,'#02120e');
     g.fillStyle=gr; g.fillRect(28,56,40,38); // hunched torso
-    OR(30,94,12,30,'#04120e'); OR(54,94,12,30,'#04120e'); // legs
+    OR(30,94+legL,12,30,'#04120e'); OR(54,94+legR,12,30,'#04120e'); // legs
     OR(20,58,10,36,'#04120e'); OR(66,58,10,36,'#04120e'); // arms
     g.fillStyle='#c8c8c8'; g.fillRect(20,92,2,8); g.fillRect(24,92,2,8); g.fillRect(74,92,2,8); g.fillRect(78,92,2,8); // claws
     C(48,42,15,'#051a14'); // dark skull
@@ -1450,8 +1458,8 @@ function drawEnemySprite(type){
   if(type==='annihilator'){
     // Eviternity's Annihilator: a bulkier, horned Baron — dark red,
     // green glowing eyes, a fireball in its hand (it hurls hellfire)
-    OR(26,110,16,18,'#0a0a0a'); OR(54,110,16,18,'#0a0a0a'); // boots
-    OR(28,82,14,30,'#2a0a0a'); OR(54,82,14,30,'#2a0a0a'); // legs
+    OR(26,110+legL,16,18,'#0a0a0a'); OR(54,110+legR,16,18,'#0a0a0a'); // boots
+    OR(28,82+legL,14,30,'#2a0a0a'); OR(54,82+legR,14,30,'#2a0a0a'); // legs
     const gr=g.createLinearGradient(20,0,76,0); gr.addColorStop(0,'#5a1a1a'); gr.addColorStop(1,'#2a0a0a');
     g.fillStyle='#0a0a0a'; g.fillRect(19,43,58,42);
     g.fillStyle=gr; g.fillRect(20,44,56,40); // bulky torso
@@ -1477,7 +1485,7 @@ function drawEnemySprite(type){
     // fireballs. One dominant brown, a dark outline.
     const gr=g.createLinearGradient(28,0,68,0); gr.addColorStop(0,'#6a4526'); gr.addColorStop(1,'#3a2010');
     g.fillStyle=gr; g.fillRect(30,58,36,36); // hunched torso
-    OR(32,94,10,30,'#3a2010'); OR(54,94,10,30,'#3a2010'); // legs
+    OR(32,94+legL,10,30,'#3a2010'); OR(54,94+legR,10,30,'#3a2010'); // legs
     OR(22,60,10,34,'#3a2010'); OR(64,60,10,34,'#3a2010'); // arms
     g.fillStyle='#e8e8e8'; g.fillRect(22,92,2,6); g.fillRect(26,92,2,6); g.fillRect(72,92,2,6); g.fillRect(76,92,2,6); // claws
     C(48,44,14,'#6a3a22'); // head
@@ -1496,7 +1504,7 @@ function drawEnemySprite(type){
     const gr=g.createLinearGradient(20,0,76,0); gr.addColorStop(0,'#a05060'); gr.addColorStop(1,'#601828');
     g.fillStyle=gr; g.beginPath(); g.ellipse(48,86,28,26,0,0,6.29); g.fill(); // bulky body
     g.strokeStyle='#0a0a0a'; g.lineWidth=2; g.beginPath(); g.ellipse(48,86,28,26,0,0,6.29); g.stroke(); // outline
-    OR(28,108,12,16,'#802040'); OR(56,108,12,16,'#802040'); // legs
+    OR(28,108+legL,12,16,'#802040'); OR(56,108+legR,12,16,'#802040'); // legs
     OR(18,70,10,30,'#802040'); OR(68,70,10,30,'#802040'); // arms
     C(48,42,16,'#904858'); // head
     C(40,38,3,'#ffd75e'); C(56,38,3,'#ffd75e'); // tiny glowing eyes
@@ -1516,7 +1524,7 @@ function drawEnemySprite(type){
     const gr=g.createLinearGradient(16,0,80,0); gr.addColorStop(0,'#a07038'); gr.addColorStop(1,'#5a3a18');
     g.fillStyle=gr; g.beginPath(); g.ellipse(48,84,32,32,0,0,6.29); g.fill(); // the fat belly
     g.strokeStyle='#0a0a0a'; g.lineWidth=2; g.beginPath(); g.ellipse(48,84,32,32,0,0,6.29); g.stroke(); // outline
-    OR(28,112,12,12,'#5a3a1a'); OR(56,112,12,12,'#5a3a1a'); // little legs
+    OR(28,112+legL,12,12,'#5a3a1a'); OR(56,112+legR,12,12,'#5a3a1a'); // little legs
     // the arm cannons: two big metal tubes, one on each arm
     OR(8,60,14,36,'#3a3a3a'); OR(74,60,14,36,'#3a3a3a');
     C(15,58,8,'#2a2a2a'); C(81,58,8,'#2a2a2a'); // muzzles
@@ -1536,7 +1544,7 @@ function drawEnemySprite(type){
     const gr=g.createLinearGradient(24,0,72,0); gr.addColorStop(0,'#8a7a3a'); gr.addColorStop(1,'#3a2a10');
     g.fillStyle=gr; g.fillRect(28,56,40,38); // muscular torso
     g.fillStyle='#0a0a0a'; g.fillRect(28,56,40,2); // dark top line
-    OR(30,94,12,30,'#2a1a08'); OR(54,94,12,30,'#2a1a08'); // legs
+    OR(30,94+legL,12,30,'#2a1a08'); OR(54,94+legR,12,30,'#2a1a08'); // legs
     OR(18,58,12,38,'#2a1a08'); OR(66,58,12,38,'#2a1a08'); // arms
     g.fillStyle='#e8e8e8'; g.fillRect(18,94,3,8); g.fillRect(23,94,3,8); g.fillRect(75,94,3,8); g.fillRect(80,94,3,8); // claws
     C(48,42,15,'#6a5a2a'); // head
@@ -1555,7 +1563,7 @@ function drawEnemySprite(type){
     const gr=g.createLinearGradient(30,0,66,0); gr.addColorStop(0,'#d8d8c8'); gr.addColorStop(1,'#8a8a7a');
     g.fillStyle=gr; g.fillRect(34,56,28,38); // skeletal torso
     g.fillStyle='#0a0a0a'; for(let ry=62;ry<90;ry+=6) g.fillRect(36,ry,24,2); // ribs
-    OR(36,94,10,30,'#8a8a7a'); OR(50,94,10,30,'#8a8a7a'); // legs
+    OR(36,94+legL,10,30,'#8a8a7a'); OR(50,94+legR,10,30,'#8a8a7a'); // legs
     OR(24,58,10,36,'#8a8a7a'); OR(62,58,10,36,'#8a8a7a'); // arms
     // the shoulder rocket launchers
     OR(14,44,16,12,'#3a3a3a'); OR(66,44,16,12,'#3a3a3a');
@@ -1575,7 +1583,7 @@ function drawEnemySprite(type){
     const gr=g.createLinearGradient(16,0,80,0); gr.addColorStop(0,'#9a8a7a'); gr.addColorStop(1,'#4a3a2a');
     g.fillStyle=gr; g.fillRect(24,56,48,40); // massive torso
     g.fillStyle='#0a0a0a'; g.fillRect(24,56,48,2); // dark top line
-    OR(28,96,14,28,'#3a2a1a'); OR(54,96,14,28,'#3a2a1a'); // legs
+    OR(28,96+legL,14,28,'#3a2a1a'); OR(54,96+legR,14,28,'#3a2a1a'); // legs
     OR(14,58,12,38,'#3a2a1a'); // left arm
     // right arm is cybernetic: a metal rocket launcher
     OR(70,58,14,38,'#3a3a3a'); R(72,58,10,4,'#8a8a8a');
@@ -1597,8 +1605,8 @@ function drawEnemySprite(type){
   // whole silhouette, heavy shadow on the right side, a bright top
   // highlight — chunky and readable at a distance, not clean line art.
   g.fillStyle='#0a0a0a'; g.fillRect(14,14,68,116); // the silhouette shadow (the dark outline)
-  OR(30,112,13,16,'#0e0e0e'); OR(53,112,13,16,'#0e0e0e'); // sabatons
-  OR(31,82,11,32,P.uniD); OR(54,82,11,32,P.uniD); // greaves
+  OR(30,112+legL,13,16,'#0e0e0e'); OR(53,112+legR,13,16,'#0e0e0e'); // sabatons
+  OR(31,82+legL,11,32,P.uniD); OR(54,82+legR,11,32,P.uniD); // greaves
   // breastplate (steel, left-lit, dark outline) with a centre ridge
   const gr=g.createLinearGradient(24,0,72,0); gr.addColorStop(0,P.uni); gr.addColorStop(1,P.uniD);
   g.fillStyle='#0a0a0a'; g.fillRect(23,43,50,41);
@@ -1721,7 +1729,7 @@ function shadeLevels(cv){ // [bright, mid, dark] for distance shading
   return out;
 }
 const ENEMY_SPR={};
-for(const t of ['guard','officer','ss','dog','mutant','boss','nightmare','astral','annihilator','imp','pinky','mancubus','hellknight','revenant','cyberdemon']) ENEMY_SPR[t]=shadeLevels(drawEnemySprite(t));
+for(const t of ['guard','officer','ss','dog','mutant','boss','nightmare','astral','annihilator','imp','pinky','mancubus','hellknight','revenant','cyberdemon']) ENEMY_SPR[t]=[0,1,2,3].map(f=>shadeLevels(drawEnemySprite(t,f))); // [frame][shade level]
 const GUN_SPR={};
 for(const w of WEAPONS) GUN_SPR[w.key]=drawGunSprite(w.key);
 const ITEM_COLOR={health:'#5a8aff',ammo:'#ffd75e',gold:'#ffd75e',bomb:'#ff8844',exit:'#7ee081',key:'#ffd75e',cross:'#ffffff',chalice:'#ffd75e',bible:'#e8e8e8',crown:'#ffd75e',firstaid:'#ffffff',food:'#d8a878',clip:'#ffd75e',shells:'#ff5555',rockets:'#ff8844',cells:'#7ec8ff',key1:'#ffd75e'};
@@ -2186,7 +2194,7 @@ function render(){
   const sprs=[];
   for(const it of items) if(!it.taken&&ITEM_SPR[it.kind]) sprs.push({x:it.x,y:it.y,cv:ITEM_SPR[it.kind],scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
   for(const dc of decor) sprs.push({x:dc.x,y:dc.y,cv:DECOR_SPR[dc.kind],scale:dc.scale||1,dist:Math.hypot(dc.x-player.x,dc.y-player.y)});
-  for(const e of enemies) if(!e.dead) sprs.push({x:e.x,y:e.y,cv:ENEMY_SPR[e.type]||ENEMY_SPR.guard,scale:e.type==='cyberdemon'?2.0:(e.type==='boss'||e.type==='annihilator')?1.6:e.type==='mancubus'?1.4:e.type==='hellknight'?1.3:e.type==='astral'?1.2:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e),stag:e.staggered,flash:e.flash,hover:ENEMY_TYPES[e.type].hover||0,flick:e.type==='nightmare'});
+  for(const e of enemies) if(!e.dead){ const fr=e.state==='shoot'?2:(e.state==='pain'||e.state==='stagger')?3:(e.state==='chase'||e.state==='path')?Math.floor(Date.now()/140+e.x*2+e.y*3)%2:0; sprs.push({x:e.x,y:e.y,cv:ENEMY_SPR[e.type]||ENEMY_SPR.guard,frame:fr,scale:e.type==='cyberdemon'?2.0:(e.type==='boss'||e.type==='annihilator')?1.6:e.type==='mancubus'?1.4:e.type==='hellknight'?1.3:e.type==='astral'?1.2:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e),stag:e.staggered,flash:e.flash,hover:ENEMY_TYPES[e.type].hover||0,flick:e.type==='nightmare'}); }
   for(const pr of projectiles) sprs.push({x:pr.x,y:pr.y,proj:pr.kind,scale:0.5,dist:Math.hypot(pr.x-player.x,pr.y-player.y)});
   for(const sh of enemyShots) sprs.push({x:sh.x,y:sh.y,proj:sh.kind,scale:0.5,dist:Math.hypot(sh.x-player.x,sh.y-player.y)});
   sprs.sort((a,b)=>b.dist-a.dist);
@@ -2207,7 +2215,7 @@ function render(){
       continue;
     }
     const level=s.flash>0?0:(d<4?0:d<9?1:2);
-    const img=s.cv[level];
+    const img=s.frame!==undefined?s.cv[s.frame][level]:s.cv[level]; // enemies have frames, items/decor don't
     if(s.flick) sctx.globalAlpha=0.15+0.75*Math.abs(Math.sin(Date.now()/130+s.x*3+s.y*5)); // Nightmare Demon: flickers, mostly nearly invisible
     if(s.stag){
       sctx.fillStyle='rgba(255,215,94,0.25)';
