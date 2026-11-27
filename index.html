@@ -1385,11 +1385,11 @@ function drawEnemySprite(type){
     g.fillStyle=col; g.fillRect(x,y,w,h);
   };
   const P={
-    guard:{skin:'#b08a68',uni:'#8a8a8a',uniD:'#5a5a5a',hat:'#7a7a7a'}, // plain steel knight
-    officer:{skin:'#b89878',uni:'#9a9ab0',uniD:'#5a5a6a',hat:'#c8a84a'}, // knight captain, gold helm
+    guard:{skin:'#8a6a48',uni:'#6a6a6a',uniD:'#3a3a3a',hat:'#5a5a5a'}, // plain steel knight, dark Doom steel
+    officer:{skin:'#8a7050',uni:'#7a7a8a',uniD:'#3a3a4a',hat:'#a88838'}, // knight captain, dark steel + dull gold helm
     ss:{skin:'#b08a68',uni:'#1a1a1a',uniD:'#0a0a0a',hat:'#0e0e0e'}, // dark knight, black plate
-    mutant:{skin:'#6a7a3e',uni:'#6a7a5a',uniD:'#3a4a2a',hat:'#4a5a3a'}, // hedge knight, green steel
-    boss:{skin:'#b08a68',uni:'#b0a070',uniD:'#6a5a3a',hat:'#ffd75e'}, // the Knight Lord, gold
+    mutant:{skin:'#5a6a32',uni:'#5a6a4a',uniD:'#2a3a20',hat:'#3a4a2a'}, // hedge knight, dark green steel
+    boss:{skin:'#8a6a48',uni:'#8a7a50',uniD:'#4a3a22',hat:'#c8a838'}, // the Knight Lord, dull gold
     dog:{skin:'#c09050',uni:'#8a5a2a',uniD:'#5a3a1a',hat:'#6a3a1a'}, // lion: tawny, dark mane
   }[type]||{skin:'#b08a68',uni:'#8a8a8a',uniD:'#5a5a5a',hat:'#7a7a7a'};
   if(type==='dog'){
@@ -1475,7 +1475,7 @@ function drawEnemySprite(type){
     // Doom Eternal's Imp: a small, hunched brown demon, spikes down its
     // back, glowing yellow eyes, little horns — fast, and it throws
     // fireballs. One dominant brown, a dark outline.
-    const gr=g.createLinearGradient(28,0,68,0); gr.addColorStop(0,'#8a5a3a'); gr.addColorStop(1,'#4a2a1a');
+    const gr=g.createLinearGradient(28,0,68,0); gr.addColorStop(0,'#6a4526'); gr.addColorStop(1,'#3a2010');
     g.fillStyle=gr; g.fillRect(30,58,36,36); // hunched torso
     OR(32,94,10,30,'#3a2010'); OR(54,94,10,30,'#3a2010'); // legs
     OR(22,60,10,34,'#3a2010'); OR(64,60,10,34,'#3a2010'); // arms
@@ -1493,12 +1493,12 @@ function drawEnemySprite(type){
     // Doom Eternal's Pinky: a bulky pink demon, a huge mouth full of
     // teeth, tiny eyes, small horns — the classic melee demon, tougher
     // than the lion. One dominant pink, a dark outline.
-    const gr=g.createLinearGradient(20,0,76,0); gr.addColorStop(0,'#d07090'); gr.addColorStop(1,'#802040');
+    const gr=g.createLinearGradient(20,0,76,0); gr.addColorStop(0,'#a05060'); gr.addColorStop(1,'#601828');
     g.fillStyle=gr; g.beginPath(); g.ellipse(48,86,28,26,0,0,6.29); g.fill(); // bulky body
     g.strokeStyle='#0a0a0a'; g.lineWidth=2; g.beginPath(); g.ellipse(48,86,28,26,0,0,6.29); g.stroke(); // outline
     OR(28,108,12,16,'#802040'); OR(56,108,12,16,'#802040'); // legs
     OR(18,70,10,30,'#802040'); OR(68,70,10,30,'#802040'); // arms
-    C(48,42,16,'#c06080'); // head
+    C(48,42,16,'#904858'); // head
     C(40,38,3,'#ffd75e'); C(56,38,3,'#ffd75e'); // tiny glowing eyes
     g.fillStyle='#1a0505'; g.beginPath(); g.ellipse(48,50,12,7,0,0,6.29); g.fill(); // the huge mouth
     g.fillStyle='#ffffff';
@@ -1513,7 +1513,7 @@ function drawEnemySprite(type){
     // Doom Eternal's Mancubus: a huge, fat orange-tan demon with a
     // flamethrower on each arm — slow, tanky, and it hurls a spread of
     // fireballs. One dominant orange-tan, a dark outline.
-    const gr=g.createLinearGradient(16,0,80,0); gr.addColorStop(0,'#d09050'); gr.addColorStop(1,'#7a4a20');
+    const gr=g.createLinearGradient(16,0,80,0); gr.addColorStop(0,'#a07038'); gr.addColorStop(1,'#5a3a18');
     g.fillStyle=gr; g.beginPath(); g.ellipse(48,84,32,32,0,0,6.29); g.fill(); // the fat belly
     g.strokeStyle='#0a0a0a'; g.lineWidth=2; g.beginPath(); g.ellipse(48,84,32,32,0,0,6.29); g.stroke(); // outline
     OR(28,112,12,12,'#5a3a1a'); OR(56,112,12,12,'#5a3a1a'); // little legs
@@ -1521,7 +1521,7 @@ function drawEnemySprite(type){
     OR(8,60,14,36,'#3a3a3a'); OR(74,60,14,36,'#3a3a3a');
     C(15,58,8,'#2a2a2a'); C(81,58,8,'#2a2a2a'); // muzzles
     C(15,58,4,'#ff6622'); C(81,58,4,'#ff6622'); // glowing bores
-    C(48,40,13,'#c08040'); // small head
+    C(48,40,13,'#906830'); // small head
     C(42,38,3,'#ffdd22'); C(54,38,3,'#ffdd22'); // glowing yellow eyes
     R(44,46,8,2,'#1a0a05'); // mouth slit
     g.fillStyle='#7a4a20'; g.beginPath(); g.moveTo(38,30); g.lineTo(34,18); g.lineTo(44,26); g.fill();
