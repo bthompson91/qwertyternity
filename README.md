@@ -2,11 +2,11 @@
 
 An Eviternity-style raycaster running entirely in the browser. No build step, no libraries — one `index.html` (plus a Google Fonts link for the HUD typeface). It started life as QWERTYSTEIN (a Wolfenstein-style raycaster); it is now QWERTYTERNITY — Doom, but bigger, in the spirit of Eviternity: epic scale, grand halls, new monsters, and a heavenly Astral episode. Walls are Doom-style 64×64 texture slices, enemies are drawn sprites, and the floors have Doom-style sector heights (raised platforms, a boss dais).
 
-Play it live: https://bthompson91.github.io/qwertystein/
+Play it live: https://bthompson91.github.io/qwertyternity/
 
 ## How to play
 
-Open `index.html` in a browser, click, press Enter. Or play live at https://bthompson91.github.io/qwertystein/
+Open `index.html` in a browser, click, press Enter. Or play live at https://bthompson91.github.io/qwertyternity/
 
 - **WASD** move, **mouse** look (click to lock), **← →** turn, **mouse Y / ↑ ↓** look up/down, **Space / J** jump
 - **Click / Ctrl** shoot (Ctrl is the keyboard trigger; click is the mouse trigger)
