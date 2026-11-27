@@ -4,10 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QWERTYSTEIN — dense ASCII raycaster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee+Tint&display=swap" rel="stylesheet">
 <style>
   html,body{margin:0;padding:0;background:#050505;color:#d8d8c8;font-family:ui-monospace,Menlo,Consolas,monospace}
   #wrap{max-width:1060px;margin:0 auto;padding:10px}
-  h1{font-size:18px;letter-spacing:3px;margin:6px 0 2px;color:#ffd75e}
+  h1{font-family:'Bungee Tint',ui-monospace,Menlo,Consolas,monospace;font-size:22px;letter-spacing:3px;margin:6px 0 2px;color:#ffd75e}
   h1 span{color:#7ee081}
   p.sub{margin:0 0 8px;color:#888;font-size:13px}
   #game{display:block;width:100%;height:auto;background:#000;border:2px solid #444;cursor:crosshair;image-rendering:pixelated}
@@ -42,17 +45,17 @@
   <div class="pad" id="stick"><span class="lbl">MOVE</span><div class="nub" id="stickNub"></div></div>
   <div class="pad" id="lookpad"><span class="lbl">LOOK — drag, tap = fire</span><div class="nub" id="lookNub"></div></div>
   <button class="big" data-k="Space">FIRE</button>
-  <button data-k="KeyQ">DASH</button><button data-k="KeyT">BOMB</button>
+  <button data-k="KeyQ">DASH</button><button data-k="KeyT">BOMB</button><button data-k="KeyJ">JUMP</button>
   <button data-act="weapon">WEAPON</button><button data-act="hook">HOOK</button><button data-act="pause">PAUSE</button>
 </div>
 <div id="padstat"></div>
-<pre id="keys"><b>WASD</b> move &nbsp; <b>Mouse</b> look (click to lock) &nbsp; <b>← →</b> turn &nbsp; <b>Click / Space</b> shoot
+<pre id="keys"><b>WASD</b> move &nbsp; <b>Mouse</b> look (click to lock) &nbsp; <b>← →</b> turn &nbsp; <b>Mouse Y / ↑ ↓</b> look up/down &nbsp; <b>J</b> jump &nbsp; <b>Click / Space</b> shoot
 <b>1-8</b> weapons: 1 Fist  2 Pistol  3 Shotgun  4 Super Shotgun  5 Chaingun  6 Rocket Launcher  7 Plasma Gun  8 BFG9000 &nbsp; <b>F</b> meat hook (Super Shotgun) &nbsp; <b>Shift</b> run
-<b>Q</b> dash &nbsp; <b>T</b> throw bomb &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>N</b> new run (on death) &nbsp; <b>E</b> use (door / pushwall / elevator) / <b>glory kill</b> a staggered enemy
+<b>Q</b> dash &nbsp; <b>J</b> jump &nbsp; <b>T</b> throw bomb &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>N</b> new run (on death) &nbsp; <b>E</b> use (door / pushwall / elevator) / <b>glory kill</b> a staggered enemy
 <b>QWERTY tip:</b> strafe with <b>Q/E</b>? No — Q is dash, E is nothing. Strafe is A/D while turning with the mouse. That's the QWERTYSTEIN way.
 Find the glowing <b>[EXIT]</b> portal on each floor. Kills give XP. Level up: press <b>1 / 2 / 3</b> to pick an upgrade.
-<b>Phone:</b> left pad = move stick, right pad = drag to look (tap it to fire), FIRE / DASH / BOMB buttons below. Also works by touch on the game itself: left half drag = move, right half drag = look, tap right = fire.
-<b>Joypad:</b> plug in any standard gamepad (Xbox / PlayStation / Switch Pro / 8BitDo) and press a button — left stick moves, right stick looks, RT or A fires, X meat hooks (Super Shotgun), B dashes, Y bombs, LB/RB change weapon, Start pauses. On upgrade screens LB/RB pick, A confirms.</pre>
+<b>Phone:</b> left pad = move stick, right pad = drag to look (tap it to fire), FIRE / DASH / BOMB / JUMP buttons below. Also works by touch on the game itself: left half drag = move, right half drag = look, tap right = fire.
+<b>Joypad:</b> plug in any standard gamepad (Xbox / PlayStation / Switch Pro / 8BitDo) and press a button — left stick moves, right stick looks (push up/down to look up/down), RT or A fires, X meat hooks (Super Shotgun), B dashes, Y bombs, LB/RB change weapon, Start pauses. On upgrade screens LB/RB pick, A confirms.</pre>
 </div>
 <script>
 'use strict';
@@ -110,12 +113,21 @@ const WOLF={
   gunDamage(dist){ const r=rndT(); if(dist<2) return r/4; if(dist<4) return r/6; if(r/12<dist) return 0; return r/6; },
   knifeDamage(){ return rndT()>>4; }, // 0..15
   // T_Shoot hit chance (WL_STATE.C): dist tiles, running = player sprinting
-  shootHitChance(dist, running, visible){ let c; if(running) c=visible?160-dist*16:160-dist*8; else c=visible?256-dist*16:256-dist*8; return Math.max(0,Math.min(255,c)); },
-  shootDamage(dist){ const r=rndT(); if(dist<2) return r>>2; if(dist<4) return r>>3; return r>>4; },
+  // Nerfed from the raw Wolf3D tables (2026-11-27): the original hit
+  // chance (88% at 2 tiles) and damage (avg 32 HP point-blank) made
+  // enemy guns far too strong for this game's pacing.
+  shootHitChance(dist, running, visible){ const base=running?100:150, per=visible?20:10; return Math.max(0,Math.min(255, base-dist*per)); },
+  shootDamage(dist){ const r=rndT(); if(dist<2) return r>>3; if(dist<4) return r>>4; return r>>5; },
 };
-const COLS=180, ROWS=75; // 13,500 cells — 3.09x the old 104x42 (4,368)
-const HUD_H=10, VIEW_ROWS=ROWS-HUD_H; // bottom 10 rows are the Doom-style status bar
-let CW=6, CH=8; // cell size in canvas pixels — rescaled by resizeCanvas()
+// Pixel layout: the view is the full canvas minus a HUD bar at the
+// bottom. The scene is raycast into an offscreen canvas a little
+// larger than the view (overscan), so view-bob just pans the window
+// inside it and never exposes a black border. One wall character is
+// exactly one ray column wide (180 columns across the view, as before).
+const FOV=Math.PI/3; // 60 degrees, same as before
+let HUD_PX=84, VW=1080, VH=516, CHAR_W=6, OX=48, OY=48, nCols=180;
+let scene=document.createElement('canvas'), sctx=scene.getContext('2d');
+sctx.textBaseline='top';
 // Fullscreen: when the browser goes fullscreen (F11 or the button),
 // the canvas resizes to fill the screen, keeping the game's 1080x600
 // aspect (letterboxed) and scaling the character cells with it.
@@ -131,8 +143,14 @@ function resizeCanvas(){
     cv.width=1080; cv.height=600; cv.style.width=''; cv.style.height='';
     document.body.classList.remove('fs');
   }
-  CW=cv.width/COLS; CH=cv.height/ROWS;
-  ctx.font='bold '+Math.max(6,Math.floor(CH))+'px ui-monospace, Menlo, Consolas, monospace';
+  HUD_PX=Math.max(72, Math.round(cv.height*0.14));
+  VW=cv.width; VH=cv.height-HUD_PX;
+  CHAR_W=cv.width/180;
+  OX=Math.round(CHAR_W*8); OY=Math.round(cv.height*0.08);
+  scene.width=Math.round(VW+2*OX); scene.height=Math.round(VH+2*OY);
+  nCols=Math.floor(scene.width/CHAR_W);
+  zbuf=new Float32Array(nCols+2);
+  ctx.font='bold '+Math.max(6,Math.floor(cv.height/75))+'px ui-monospace, Menlo, Consolas, monospace';
 }
 function toggleFullscreen(){
   if(document.fullscreenElement) document.exitFullscreen();
@@ -157,20 +175,34 @@ const THEMES=[
  {name:'BUNKER', wall:['#8a7a5a','#6a6a6a','#5a4a3a','#8a8a7a'], floor:'#3a342a', ceil:'#181818', fog:'#080808'},
  {name:'VAULT',  wall:['#a08a4a','#7a7a8a','#8a5a3a','#9a8a5a'], floor:'#3a2e1e', ceil:'#14141e', fog:'#0a0805'},
 ];
-// 8x8 ASCII wall tiles, one per wall type (index 1..4)
-const WALL_ART={
- 1:['████████','▓▓▓▓▓▓▓▓','████████','▓▓▓▓▓▓▓▓','████████','▓▓▓▓▓▓▓▓','████████','▓▓▓▓▓▓▓▓'], // brick
- 2:['▓▓▓▓▓▓▓▓','▒▒▒▒▒▒▒▒','▓▓▓▓▓▓▓▓','▒▒▒▒▒▒▒▒','▓▓▓▓▓▓▓▓','▒▒▒▒▒▒▒▒','▓▓▓▓▓▓▓▓','▒▒▒▒▒▒▒▒'], // stone
- 3:['▌▌▌▌▌▌▌▌','▐▐▐▐▐▐▐▐','▌▌▌▌▌▌▌▌','▐▐▐▐▐▐▐▐','▌▌▌▌▌▌▌▌','▐▐▐▐▐▐▐▐','▌▌▌▌▌▌▌▌','▐▐▐▐▐▐▐▐'], // wood planks
- 4:['▚▞▚▞▚▞▚▞','▞▚▞▚▞▚▞▚','▚▞▚▞▚▞▚▞','▞▚▞▚▞▚▞▚','▚▞▚▞▚▞▚▞','▞▚▞▚▞▚▞▚','▚▞▚▞▚▞▚▞','▞▚▞▚▞▚▞▚'], // metal
- 5:['████████','▒▒▒▒▒▒▒▒','████████','▒▒▒▒▒▒▒▒','████████','▒▒▒▒▒▒▒▒','████████','▒▒▒▒▒▒▒▒'], // vault — gold blocks
- 6:['▌██████▐','▌▓▓▓▓▓▓▐','▌██████▐','▌▓▓▓▓▓▓▐','▌██████▐','▌▓▓▓▓▓▓▐','▌██████▐','▌▓▓▓▓▓▓▐'], // Wolf3D sliding door
- 7:['▓▓▓▓▓▓▓▓','▚▞▚▞▚▞▚▞','▓▓▓▓▓▓▓▓','▚▞▚▞▚▞▚▞','▓▓▓▓▓▓▓▓','▚▞▚▞▚▞▚▞','▓▓▓▓▓▓▓▓','▚▞▚▞▚▞▚▞'], // pushwall — a statue that slides
-};
-// Wall art is plain 8x8 tiles of block characters (all BMP, one code
-// unit each), so art[texY][texX] indexes one character. Emoji were
-// removed: colour emoji ignore fillStyle, render wider than a cell,
-// and split across surrogate pairs, which broke the blit.
+// Walls: the ojread/ascii-fps trick (github.com/ojread/ascii-fps) —
+// one character per ray column, stretched vertically to the wall's
+// full height at its regular width. The character is pre-rendered
+// once per (char, color) into a small tile canvas, then
+// drawImage-stretched to (CHAR_W x wall height), so wall tops and
+// bottoms are pixel-smooth instead of stepping in 8px character rows.
+// Color is distance-shaded; side faces are darker.
+const WALL_GLYPH={
+ 1:{ch:'▓'}, // brick
+ 2:{ch:'█'}, // stone
+ 3:{ch:'▒'}, // wood planks
+ 4:{ch:'█'}, // metal
+ 5:{ch:'▓'}, // vault — gold blocks
+ 6:{ch:'█'}, // Wolf3D sliding door
+ 7:{ch:'▒'}, // pushwall — a statue that slides
+}; // colour comes from the floor theme's wall palette
+const glyphCache=new Map(); // "ch|color" -> CHAR_W x 10 tile canvas
+function glyphTile(ch, color){
+  const key=ch+'|'+color;
+  let t=glyphCache.get(key);
+  if(t) return t;
+  t=document.createElement('canvas'); t.width=CHAR_W; t.height=10;
+  const g=t.getContext('2d');
+  g.font='10px monospace'; g.textBaseline='top'; g.fillStyle=color;
+  g.fillText(ch, 0, 0);
+  glyphCache.set(key, t);
+  return t;
+}
 const SHADE=['#ffffff','#e8e8e8','#c8c8c8','#a0a0a0','#787878','#585858','#383838','#222222'];
 function shadeColor(hex, dist){
   // darken a hex colour by distance; returns rgb string
@@ -200,78 +232,14 @@ const WEAPONS=[
  {name:'BFG9000',        key:'8', type:'bfg',     dmg:[100,8], rate:0.86, range:16,  spread:0,    pellets:1,  ammoType:'cells',   ammoCost:40, auto:false, kick:6, projSpeed:6.8},
 ];
 function doomDmg(w){ return w.dmg[0]*(1+rndT()%w.dmg[1]); }
-const WEAPON_ART=[
- ["        ","  ____  "," |    | "," |____| ","  |  |  ","        "], // fist
- ["        ","    __  ","   /  | ","  |===| ","  |   | ","        "], // pistol
- ["        ","  ______"," |=======","  | | | ","  | | | ","        "], // shotgun
- ["        ","  ______"," |======|"," |======|","  | | | ","        "], // super shotgun — double barrel
- ["        ","  _|_|_ "," |=====|"," |=====|","  | | | ","        "], // chaingun
- ["        ","   /\\   ","  |  |  ","  |  |  ","  |__|  ","        "], // rocket launcher
- ["        ","  ____  "," |    | "," |====| ","  |  |  ","        "], // plasma gun
- ["        ","  ______"," |######|"," |######|","  | | | ","        "], // BFG9000
-];
 // --- enemy ASCII sprites (7 wide, 8 tall, ' ' = transparent) ---
 const SPRITES={
- guard:[
- "  ___  ",
- " /   / ",
- "| ◉ ◉ |",
- " |___| ",
- "  | |  ",
- " /| |/ ",
- "  | |  ",
- " _| |_ "],
- officer:[
- "  ___  ",
- " /===/ ",
- "| ◉ ◉ |",
- " |___| ",
- "  |#|  ",
- " /| |/ ",
- "  | |  ",
- " _| |_ "],
- dog:[
- "       ",
- " /| /| ",
- "( ◉ ◉ )",
- "  >^<  ",
- "  /_/  ",
- " /| |/ ",
- "  | |  ",
- "       "],
- mutant:[
- "  ___  ",
- " / x / ",
- "| ✕ ✕ |",
- " |vvv| ",
- " /| |/ ",
- "  | |  ",
- " /| |/ ",
- " _| |_ "],
- boss:[
- "  _____ ",
- " / ___ /",
- "| ◉ ◉ ◉|",
- " |___#| ",
- "  |###| ",
- " /| |/| ",
- "  | | | ",
- " _| | |_"],
  health:["  +  "," +++ ","+++++"," +++ ","  +  "],
  ammo:[" AAA ","A A A"," AAA ","  A  ","     "],
  gold:["  $  "," $$$ ","$$$$$"," $$$ ","  $  "],
  bomb:["  O  "," OOO ","OOOOO"," OOO ","  O  "],
  exit:[" [ ] ","[   ]","[ E ]","[   ]"," [ ] "],
  key:["  K  "," KKK ","  K  ","  K  ","  K  "],
- ss:[
- "  ___  ",
- " /###/ ",
- "| ◉ ◉ |",
- " |___| ",
- "  |#|  ",
- " /| |/ ",
- "  | |  ",
- " _| |_ "],
  cross:["  +  "," +++ ","+++++"," +++ ","  +  "],
  chalice:["  Y  "," \\|/ ","  |  "," \\_/ ","     "],
  bible:[" ___ ","|___|","|___|","|___|","     "],
@@ -516,9 +484,9 @@ let player, grid, mapW, mapH, enemies, items, doors, pushwalls, depth, runSeed, 
 // Wolf3D doorobj_t / PushWall state (WL_ACT1.C): doors slide 0->1, close
 // after OPENTICS; a pushwall slides 2 tiles into the room beyond.
 let levelChoices=[], levelUpPending=0, floorClearPending=false;
-let keys={}, mouseDX=0, firing=false, lastTime=0, flash=0, shake=0, dashTime=0, turnHeld=0, bobT=0, ticAcc=0;
+let keys={}, mouseDX=0, mouseDY=0, firing=false, lastTime=0, flash=0, shake=0, dashTime=0, turnHeld=0, bobT=0, ticAcc=0;
 // touch: virtual stick (move) + look drag. stickVec is -1..1, lookDX accumulates px.
-let stickVec={x:0,y:0}, lookDX=0, choiceSel=0;
+let stickVec={x:0,y:0}, lookDX=0, lookDY=0, choiceSel=0;
 // gamepad: standard mapping, polled every frame. Any standard pad works.
 let padName='', padPrev=[];
 function chooseUpgrade(i){
@@ -528,18 +496,19 @@ function chooseUpgrade(i){
   else if(levelUpPending>0){ offerChoices(3); choiceSel=0; }
   else state='play';
 }
-let zbuf=new Float32Array(COLS);
+let zbuf=new Float32Array(256);
+let seen=new Uint8Array(64*64); // fog of war: tiles seen this floor (1 = seen)
 function log(m){ logs.unshift(m); logs=logs.slice(0,4); }
 function newRun(){
   runSeed=(Math.random()*1e9)|0;
-  depth=1; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,ammo:{bullets:50,shells:16,rockets:10,cells:80},kills:0,score:0,gold:0,dead:false,keys:0,extraLives:0,nextExtra:40000, momx:0, momy:0, invulnT:0, gloryKills:0};
+  depth=1; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,ammo:{bullets:50,shells:16,rockets:10,cells:80},kills:0,score:0,gold:0,dead:false,keys:0,extraLives:0,nextExtra:40000, momx:0, momy:0, invulnT:0, gloryKills:0,pitch:0,z:0,vz:0};
   for(const w of WEAPONS){ w.ammo = w.key==='1'?Infinity : w.key==='2'?Infinity : w.key==='3'?120 : w.key==='4'?40 : 200; }
   player.ammo={bullets:50,shells:16,rockets:10,cells:80};
   genLevel(1);
   state='play'; log('RUN #'+runSeed+' — floor 1, '+theme.name);
 }
 function genLevel(d){
-  depth=d; theme=THEMES[(d-1)%THEMES.length];
+  depth=d; theme=THEMES[(d-1)%THEMES.length]; seen.fill(0);
   rng=mulberry32(runSeed + d*7919);
   // Wolf3D: MAPSIZE 64 — maps are forced 64x64 (WL_GAME.C SetupGameLevel)
   mapW=WOLF.MAPSIZE; mapH=WOLF.MAPSIZE;
@@ -672,17 +641,17 @@ function castRay(angle){
   let side=0, guard=0;
   while(guard++<64){
     if(sDX<sDY){sDX+=dDX;mapX+=stepX;side=0}else{sDY+=dDY;mapY+=stepY;side=1}
-    if(mapX<0||mapY<0||mapX>=mapW||mapY>=mapH) return {dist:64,side:0,type:1,tex:0};
+    if(mapX<0||mapY<0||mapX>=mapW||mapY>=mapH) return {dist:64,side:0,type:1,tex:0,mx:mapX,my:mapY};
     const t=grid[mapY][mapX];
     if(t>0){
       // Wolf3D doors (tile 90): an open door is not a wall — the ray
       // passes through (DoorOpening connects the areas, WL_ACT1.C)
-      if(t===90){ const dr=doorAt(mapX,mapY); if(dr&&dr.position>=0.9){ /* open: keep tracing */ } else { const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:6,tex:wallX-Math.floor(wallX)}; } }
-      else if(t===98){ const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:7,tex:wallX-Math.floor(wallX)}; }
-      else { const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:t,tex:wallX-Math.floor(wallX)}; }
+      if(t===90){ const dr=doorAt(mapX,mapY); if(dr&&dr.position>=0.9){ /* open: keep tracing */ } else { const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:6,tex:wallX-Math.floor(wallX),mx:mapX,my:mapY}; } }
+      else if(t===98){ const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:7,tex:wallX-Math.floor(wallX),mx:mapX,my:mapY}; }
+      else { const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:t,tex:wallX-Math.floor(wallX),mx:mapX,my:mapY}; }
     }
   }
-  return {dist:64,side:0,type:1,tex:0};
+  return {dist:64,side:0,type:1,tex:0,mx:mapX,my:mapY};
 }
 // --- combat ---
 let shootCd=0, spaceEdge=false, hurtBobT=-99; // hurtBobT: bobT when last hurt (HUD face grimace)
@@ -927,6 +896,141 @@ function saveBest(){
 function best(){
   try{ return JSON.parse(localStorage.getItem('qwertystein-best')||'{"depth":0,"score":0,"kills":0}'); }catch(e){ return {depth:0,score:0,kills:0}; }
 }
+// --- drawn sprites: enemies as shaded 3D-style billboard figures,
+// guns as Doom-style viewmodel sprites (drawn once at load into
+// offscreen canvases). Doom itself uses billboard sprites, not polygon
+// models — same idea here: a shaded figure that always faces the
+// player, clipped per column against the wall z-buffer.
+function shade2(hex, f){ // multiply an #rrggbb color by f (0..1)
+  const n=parseInt(hex.slice(1),16);
+  const r=Math.min(255,Math.round(((n>>16)&255)*f)), g=Math.min(255,Math.round(((n>>8)&255)*f)), b=Math.min(255,Math.round((n&255)*f));
+  return 'rgb('+r+','+g+','+b+')';
+}
+function mkCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+function drawEnemySprite(type){
+  // 96x128 canvas. A left-side light (horizontal gradient + darker
+  // right edge) gives the figure volume.
+  const c=mkCanvas(96,128), g=c.getContext('2d');
+  const R=(x,y,w,h,col)=>{ g.fillStyle=col; g.fillRect(x,y,w,h); };
+  const C=(x,y,r,col)=>{ g.fillStyle=col; g.beginPath(); g.arc(x,y,r,0,6.29); g.fill(); };
+  const P={
+    guard:{skin:'#d8a878',uni:'#5a6a3a',uniD:'#3a4526',hat:'#4a5a2a'},
+    officer:{skin:'#e0b088',uni:'#2a2a3a',uniD:'#181822',hat:'#1a1a2a'},
+    ss:{skin:'#d8a878',uni:'#1a1a1a',uniD:'#0a0a0a',hat:'#111111'},
+    mutant:{skin:'#7a9a4a',uni:'#4a3a2a',uniD:'#2a2016',hat:'#3a2a1a'},
+    boss:{skin:'#d8a878',uni:'#3a3a4a',uniD:'#22222e',hat:'#2a2a3a'},
+    dog:{skin:'#8a6a4a',uni:'#6a4a2a',uniD:'#4a3218',hat:'#6a4a2a'},
+  }[type]||{skin:'#d8a878',uni:'#5a6a3a',uniD:'#3a4526',hat:'#4a5a2a'};
+  if(type==='dog'){
+    const gr=g.createLinearGradient(14,0,82,0); gr.addColorStop(0,P.skin); gr.addColorStop(1,P.uniD);
+    g.fillStyle=gr; g.beginPath(); g.ellipse(48,82,34,22,0,0,6.29); g.fill(); // body
+    R(24,96,10,32,P.uniD); R(38,96,10,32,P.uni); R(52,96,10,32,P.uni); R(66,96,10,32,P.uniD); // legs
+    C(48,44,17,P.skin); // head
+    g.fillStyle=P.uniD; g.beginPath(); g.moveTo(32,34); g.lineTo(38,16); g.lineTo(44,32); g.fill(); // left ear
+    g.beginPath(); g.moveTo(64,34); g.lineTo(58,16); g.lineTo(52,32); g.fill(); // right ear
+    R(40,50,16,12,shade2(P.skin,0.8)); C(48,56,4,'#1a1a1a'); // snout + nose
+    C(41,40,2,'#ff4444'); C(55,40,2,'#ff4444'); // eyes
+    R(80,70,14,5,P.uniD); // tail
+    return c;
+  }
+  const big=type==='boss'?1.15:1;
+  const gr=g.createLinearGradient(24,0,72,0); gr.addColorStop(0,P.uni); gr.addColorStop(1,P.uniD);
+  g.fillStyle=gr; g.fillRect(24,56,48,42); // torso
+  R(24,88,48,4,'#111111'); // belt
+  R(16,58,10,40,P.uniD); R(70,58,10,40,P.uniD); // arms
+  R(30,96,14,32,P.uniD); R(52,96,14,32,P.uniD); // legs
+  R(66,70,26,10,'#222222'); C(92,75,5,'#111111'); // gun pointing at you
+  R(34,22,28,30,P.skin); // head
+  R(48,22,14,30,'rgba(0,0,0,0.22)'); // right-side shade
+  if(type==='mutant'){
+    g.fillStyle=P.hat;
+    g.beginPath(); g.moveTo(34,22); g.lineTo(40,8); g.lineTo(46,22); g.fill();
+    g.beginPath(); g.moveTo(46,22); g.lineTo(52,6); g.lineTo(58,22); g.fill();
+    g.beginPath(); g.moveTo(58,22); g.lineTo(64,10); g.lineTo(66,22); g.fill(); // spiky hair
+    C(41,36,2.5,'#ff2222'); C(55,36,2.5,'#ff2222'); // red eyes
+    R(42,46,12,3,'#1a1a1a'); // grim mouth
+  } else {
+    if(type==='officer'||type==='boss'){
+      R(32,12,32,12,P.hat); R(30,24,36,5,P.hat); C(48,18,2,'#ffd75e'); // peaked cap + badge
+    } else {
+      g.fillStyle=P.hat; g.beginPath(); g.arc(48,24,17,Math.PI,0); g.fill(); R(30,22,36,4,P.hat); // helmet
+    }
+    C(41,36,2,'#111111'); C(55,36,2,'#111111'); // eyes
+    R(44,44,8,2,'#8a5a3a'); // mouth
+    if(type==='boss'){ R(24,56,12,5,'#ffd75e'); R(60,56,12,5,'#ffd75e'); R(42,46,12,3,'#111111'); } // epaulettes + moustache
+  }
+  if(big!==1){ const c2=mkCanvas(96,128), g2=c2.getContext('2d'); g2.drawImage(c,0,0); return c2; }
+  return c;
+}
+function drawGunSprite(key){
+  // Doom-style viewmodel, 240x180, weapon centered, muzzle at top.
+  const c=mkCanvas(240,180), g=c.getContext('2d');
+  const R=(x,y,w,h,col)=>{ g.fillStyle=col; g.fillRect(x,y,w,h); };
+  const C=(x,y,r,col)=>{ g.fillStyle=col; g.beginPath(); g.arc(x,y,r,0,6.29); g.fill(); };
+  const steel='#8a8a8a', dark='#2a2a2a', wood='#6a4a2a';
+  if(key==='1'){ // fist
+    R(92,70,56,70,'#d8a878'); R(92,70,14,70,'rgba(0,0,0,0.25)');
+    C(104,66,11,'#d8a878'); C(120,62,11,'#d8a878'); C(136,66,11,'#d8a878');
+    R(146,90,12,26,'#d8a878'); return c;
+  }
+  if(key==='2'){ // pistol
+    R(96,40,48,28,steel); R(110,18,20,24,dark); R(100,68,40,58,dark); R(100,68,10,58,'rgba(0,0,0,0.3)');
+    R(112,96,16,10,'#111111'); return c;
+  }
+  if(key==='3'){ // shotgun
+    R(106,8,28,84,steel); R(100,92,40,18,wood); R(96,110,48,50,wood); R(96,110,12,50,'rgba(0,0,0,0.3)');
+    R(112,60,16,10,'#111111'); return c;
+  }
+  if(key==='4'){ // super shotgun — double barrel
+    R(100,8,18,84,steel); R(122,8,18,84,dark); R(98,92,44,18,wood); R(94,110,52,50,wood);
+    R(94,110,12,50,'rgba(0,0,0,0.3)'); return c;
+  }
+  if(key==='5'){ // chaingun — barrel cluster
+    C(108,30,9,steel); C(132,30,9,steel); C(120,44,9,dark);
+    R(96,54,48,40,steel); R(100,94,40,56,dark); R(100,94,10,56,'rgba(0,0,0,0.3)'); return c;
+  }
+  if(key==='6'){ // rocket launcher — big tube
+    R(84,30,72,66,'#4a5a3a'); R(84,30,72,10,'#6a7a4a'); R(96,14,48,16,dark);
+    R(100,96,40,50,dark); C(120,63,14,'#222222'); C(120,63,8,'#ff8844'); return c;
+  }
+  if(key==='7'){ // plasma gun — glowing coils
+    R(96,40,48,80,'#3a4a5a'); R(104,16,32,26,steel);
+    C(120,28,7,'#66ccff'); C(120,52,7,'#66ccff'); C(120,76,7,'#66ccff');
+    R(100,120,40,44,dark); return c;
+  }
+  // BFG9000 — big body, green glowing core
+  R(84,40,72,90,'#2a3a2a'); R(100,10,40,32,steel);
+  C(120,85,18,'#44ff66'); C(120,85,9,'#aaffaa');
+  R(100,130,40,36,dark); return c;
+}
+function rasterizeArt(art, color){
+  // Pixel-art icon from the ASCII sprite rows (items only now).
+  const rows=art.length, cols=Math.max(...art.map(r=>r.length));
+  const cell=8, c=mkCanvas(cols*cell, rows*cell), g=c.getContext('2d');
+  const bright={'#':1,'=':1,'o':0.9,'O':0.9,'◉':1,'x':0.8,'✕':0.9};
+  for(let y=0;y<rows;y++) for(let x=0;x<art[y].length;x++){
+    const ch=art[y][x]; if(ch===' ') continue;
+    g.globalAlpha=bright[ch]||0.75; g.fillStyle=color;
+    g.fillRect(x*cell, y*cell, cell, cell);
+  }
+  g.globalAlpha=1; return c;
+}
+function shadeLevels(cv){ // [bright, mid, dark] for distance shading
+  const out=[cv];
+  for(const a of [0.35,0.6]){
+    const c=mkCanvas(cv.width,cv.height), g=c.getContext('2d');
+    g.drawImage(cv,0,0); g.fillStyle='rgba(0,0,0,'+a+')'; g.fillRect(0,0,cv.width,cv.height);
+    out.push(c);
+  }
+  return out;
+}
+const ENEMY_SPR={};
+for(const t of ['guard','officer','ss','dog','mutant','boss']) ENEMY_SPR[t]=shadeLevels(drawEnemySprite(t));
+const GUN_SPR={};
+for(const w of WEAPONS) GUN_SPR[w.key]=drawGunSprite(w.key);
+const ITEM_COLOR={health:'#ff5555',ammo:'#ffd75e',gold:'#ffd75e',bomb:'#ff8844',exit:'#7ee081',key:'#ffd75e',cross:'#ffffff',chalice:'#ffd75e',bible:'#e8e8e8',crown:'#ffd75e',firstaid:'#ffffff',food:'#d8a878',clip:'#ffd75e',shells:'#ff8844',rockets:'#ff5555',cells:'#7ec8ff',key1:'#ffd75e'};
+const ITEM_SPR={};
+for(const k of Object.keys(SPRITES)){ if(ITEM_COLOR[k]) ITEM_SPR[k]=shadeLevels(rasterizeArt(SPRITES[k], ITEM_COLOR[k])); }
 // --- gamepad (Gamepad API, standard mapping) ---
 let padMove={x:0,y:0};
 function dz(v){ return Math.abs(v)<0.18?0:v; }
@@ -936,6 +1040,7 @@ function pollPad(dt){
   if(!p) return;
   padMove.x=dz(p.axes[0]||0); padMove.y=dz(p.axes[1]||0);
   player.ang+=dz(p.axes[2]||0)*dt*3.2; // right stick look
+  player.pitch=Math.max(-0.4,Math.min(0.4,player.pitch - dz(p.axes[3]||0)*dt*1.2)); // right stick Y = look up/down
   const b=i=>!!(p.buttons[i]&&p.buttons[i].pressed);
   const edge=i=>b(i)&&!padPrev[i];
   if(b(7)||b(0)) tryShoot(); // RT or A = fire (hold)
@@ -1018,7 +1123,15 @@ function update(dt){
   if(player.regen) player.hp=Math.min(player.maxHp, player.hp+player.regen*dt);
   // mouse / touch look
   if(mouseDX){ player.ang+=mouseDX*0.0028; mouseDX=0; }
+  if(mouseDY){ player.pitch=Math.max(-0.4,Math.min(0.4,player.pitch-mouseDY*0.0022)); mouseDY=0; }
   if(lookDX){ player.ang+=lookDX*0.005; lookDX=0; }
+  if(lookDY){ player.pitch=Math.max(-0.4,Math.min(0.4,player.pitch-lookDY*0.005)); lookDY=0; }
+  if(keys['ArrowUp']) player.pitch=Math.min(0.4,player.pitch+0.9*dt);
+  if(keys['ArrowDown']) player.pitch=Math.max(-0.4,player.pitch-0.9*dt);
+  // Jump (J): simple gravity, eye height = 0.5 + z tiles. Holding J
+  // bunny-hops on landing.
+  if(keys['KeyJ']&&player.z===0){ player.vz=2.6; }
+  if(player.z>0||player.vz!==0){ player.vz-=7*dt; player.z+=player.vz*dt; if(player.z<=0){ player.z=0; player.vz=0; } }
   // Doom keyboard turning (g_game.c): slow 61.5 deg/s for the first
   // 6 tics held, then 123 deg/s walk, 246.1 deg/s run. Mouse look is
   // kept at the game's existing feel (Doom's 0.044 deg/mickey is far
@@ -1250,182 +1363,213 @@ function floorComplete(){
   sfx('exit'); player.score+=500*depth; player.gold+=1;
   floorClearPending=true; offerChoices(3); state='floorclear'; log('FLOOR '+depth+' CLEAR — elevator. Pick an upgrade, then descend');
 }
-// --- rendering: dense ASCII buffer ---
-let buf=[], col=[], bg=[];
-function clearBuf(ch,c){ buf=[]; col=[]; bg=[]; for(let y=0;y<ROWS;y++){ buf.push(new Array(COLS).fill(ch)); col.push(new Array(COLS).fill(c)); bg.push(new Array(COLS).fill('#000000')); } }
-function put(x,y,ch,c,b){ if(x<0||y<0||x>=COLS||y>=ROWS||ch===undefined) return; buf[y][x]=ch; col[y][x]=c; if(b!==undefined) bg[y][x]=b; }
-function drawText(x,y,s,c,b){ for(let i=0;i<s.length;i++) put(x+i,y,s[i],c,b===undefined?'#000000':b); }
+// --- rendering: canvas raycaster (ojread one-char-per-column walls,
+// drawn enemy/gun sprites, overscan scene + bobbed viewport) ---
 function render(){
-  clearBuf(' ','#888');
-  // Doom view bob (p_user.c P_CalcHeight): bob = speed^2 capped at
-  // MAXBOB 16 units, 0.57s cycle, up to +/-8 units -> horizon shift.
+  // Doom view bob, reduced: the old bob shifted the image up to
+  // +/-8 rows (about 50px) and exposed black borders at the edges.
+  // Now the scene is rendered with overscan and bob just pans the
+  // viewing window inside it — the image never shows a black border.
   const spd=Math.hypot(player.momx||0, player.momy||0);
-  const momT=spd*DOOM.UNITS_PER_TILE/DOOM.TICRATE; // momentum, units/tic
-  const bobU=Math.min(DOOM.BOB_MAX, momT*momT/4)/2; // bob/2, units, max 8
-  const bobRows=Math.sin(bobT*2*Math.PI/DOOM.BOB_CYCLE)*bobU/41*(VIEW_ROWS/2);
-  const horizon=VIEW_ROWS>>1; // centre of the 3D view, above the HUD bar
-  const fov=Math.PI/3;
-  // walls + floor/ceiling per column
-  for(let x=0;x<COLS;x++){
-    const a=player.ang - fov/2 + fov*x/COLS;
-    const r=castRay(a);
-    const dist=r.dist*Math.cos(a-player.ang); // fisheye correction
-    zbuf[x]=dist;
-    const wallH=Math.min(VIEW_ROWS, Math.floor(VIEW_ROWS*0.9/Math.max(0.15,dist)));
-    const top=horizon-(wallH>>1), bot=top+wallH;
-    const art=WALL_ART[r.type]||WALL_ART[1];
-    const texX=Math.min(7,Math.floor(r.tex*8));
-    const baseCol=theme.wall[(r.type-1)%theme.wall.length];
-    for(let y=0;y<VIEW_ROWS;y++){
-      if(y<top){
-        // ceiling: Unicode dots on a coloured background
-        const ch=y%3===0?'·':(y%3===1?'°':' ');
-        put(x,y,ch, shadeColor(theme.ceil, 1), shadeColor(theme.ceil, 4));
-      } else if(y>=bot){
-        // floor: block-density gradient by row distance, coloured bg
-        const fd=(y-horizon)/Math.max(1,(VIEW_ROWS-horizon));
-        const ch=fd<0.25?'▓':fd<0.5?'▒':fd<0.75?'░':'·';
-        put(x,y,ch, shadeColor(theme.floor, 1+fd*4), shadeColor(theme.floor, 3+fd*4));
-      } else {
-        const texY=Math.min(7,Math.floor((y-top)/Math.max(1,wallH)*8));
-        const ch=art[texY][texX];
-        let c=shadeColor(baseCol, dist);
-        if(r.side===1) c=shadeColor(baseCol, dist+1.5);
-        // wall: foreground glyph + a darker shade of the same colour
-        // as its background, per character
-        put(x,y,ch,c, shadeColor(baseCol, dist+3));
-      }
-    }
+  const momT=spd*DOOM.UNITS_PER_TILE/DOOM.TICRATE;
+  const bobU=Math.min(DOOM.BOB_MAX, momT*momT/4)/2; // max 8 units
+  const bobY=Math.sin(bobT*2*Math.PI/DOOM.BOB_CYCLE)*bobU*2.5; // px, ~40% of old
+  const bobX=Math.sin(bobT*2*Math.PI/DOOM.BOB_CYCLE*0.5)*bobU*1.0;
+  const shX=shake>0?rr(-shake,shake)*2:0, shY=shake>0?rr(-shake,shake)*2:0;
+  const pitch=player.pitch||0, eyeZ=0.5+(player.z||0);
+  const SW=scene.width, SH=scene.height, k=VW/1080;
+  const projDist=(VW/2)/Math.tan(FOV/2);
+  const horizon=SH/2 + Math.tan(pitch)*projDist;
+  // floor + ceiling: flat bands, shaded by distance from the eye
+  for(let y=0;y<SH;y+=4){
+    const ceil=y+2<horizon;
+    const d=ceil?(1-eyeZ)*projDist/Math.max(1,horizon-y):eyeZ*projDist/Math.max(1,y-horizon);
+    sctx.fillStyle=shadeColor(ceil?theme.ceil:theme.floor, Math.min(11,d));
+    sctx.fillRect(0,y,SW,4);
   }
-  // sprites: items + enemies, far to near, with z-buffer
+  // walls: one ray per character column, one character per column
+  // stretched to the wall's full height (the ojread/ascii-fps trick)
+  for(let ci=0;ci<nCols;ci++){
+    const cx=ci*CHAR_W + CHAR_W/2;
+    const a=player.ang + Math.atan((cx-SW/2)/projDist);
+    const r=castRay(a);
+    const dist=r.dist*Math.cos(a-player.ang);
+    zbuf[ci]=dist;
+    if(r.mx>=0&&r.my>=0&&r.mx<mapW&&r.my<mapH) seen[r.my*64+r.mx]=1;
+    const wallH=projDist/Math.max(0.15,dist);
+    const top=horizon-(1-eyeZ)*wallH, bot=horizon+eyeZ*wallH;
+    const gl=WALL_GLYPH[r.type]||WALL_GLYPH[1];
+    const base=theme.wall[(r.type-1)%theme.wall.length]; // per-floor palette
+    let col=shadeColor(base, dist);
+    if(r.side===1) col=shadeColor(base, dist+1.5);
+    sctx.drawImage(glyphTile(gl.ch, col), ci*CHAR_W, top, CHAR_W, bot-top);
+  }
+  // fog of war: the area around the player is always revealed
+  const px=Math.floor(player.x), py=Math.floor(player.y);
+  for(let dy=-5;dy<=5;dy++) for(let dx=-5;dx<=5;dx++){
+    if(dx*dx+dy*dy>25) continue;
+    const gx=px+dx, gy=py+dy;
+    if(gx>=0&&gy>=0&&gx<mapW&&gy<mapH) seen[gy*64+gx]=1;
+  }
+  // sprites: items + enemies + projectiles, far to near, per-column
+  // z-buffer clipping against the walls
   const sprs=[];
-  for(const it of items) if(!it.taken&&SPRITES[it.kind]) sprs.push({x:it.x,y:it.y,art:SPRITES[it.kind],color:it.kind==='exit'?'#7ee081':(it.kind==='firstaid'||it.kind==='food')?'#ff7070':(it.kind==='cross'||it.kind==='chalice'||it.kind==='bible'||it.kind==='crown'||it.kind==='key1')?'#ffd75e':'#c0c0c0',scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
-  for(const e of enemies) if(!e.dead){ const b=ENEMY_TYPES[e.type]; sprs.push({x:e.x,y:e.y,art:SPRITES[b.spr],color:e.staggered?(Math.floor(e.staggerT*6)%2===0?'#ffffff':'#ffd75e'):(e.flash>0?'#ffffff':b.color),scale:e.type==='boss'?1.6:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e),stag:e.staggered}); }
-  for(const pr of projectiles) sprs.push({x:pr.x,y:pr.y,art:[pr.kind==='rocket'?'*':pr.kind==='plasma'?'o':'@'],color:'#ffffff',scale:0.5,dist:Math.hypot(pr.x-player.x,pr.y-player.y)});
+  for(const it of items) if(!it.taken&&ITEM_SPR[it.kind]) sprs.push({x:it.x,y:it.y,cv:ITEM_SPR[it.kind],scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
+  for(const e of enemies) if(!e.dead) sprs.push({x:e.x,y:e.y,cv:ENEMY_SPR[e.type]||ENEMY_SPR.guard,scale:e.type==='boss'?1.6:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e),stag:e.staggered,flash:e.flash});
+  for(const pr of projectiles) sprs.push({x:pr.x,y:pr.y,proj:pr.kind,scale:0.5,dist:Math.hypot(pr.x-player.x,pr.y-player.y)});
   sprs.sort((a,b)=>b.dist-a.dist);
   for(const s of sprs){
     const dx=s.x-player.x, dy=s.y-player.y, d=s.dist;
     if(d<0.3||d>18) continue;
     let da=Math.atan2(dy,dx)-player.ang; while(da>Math.PI)da-=2*Math.PI; while(da<-Math.PI)da+=2*Math.PI;
-    if(Math.abs(da)>fov/2+0.3) continue;
-    const sx=Math.floor((0.5+da/fov)*COLS);
-    const h=Math.floor(VIEW_ROWS*0.9/d*s.scale*0.9), w=Math.floor(h*0.7);
-    const top=horizon-(h>>1);
-    const art=s.art, ah=art.length, aw=art[0].length;
-    for(let sy=0;sy<h;sy++){
-      const ay=Math.min(ah-1,Math.floor(sy/h*ah));
-      for(let sx2=0;sx2<w;sx2++){
-        const ax=Math.min(aw-1,Math.floor(sx2/w*aw));
-        const ch=art[ay][ax]; if(ch===' ') continue;
-        const cx=sx-(w>>1)+sx2;
-        if(cx<0||cx>=COLS) continue;
-        if(d>zbuf[cx]+0.2) continue;
-        put(cx, top+sy, ch, shadeColor(s.color, d*0.7));
-      }
+    if(Math.abs(da)>FOV/2+0.3) continue;
+    const sx=SW/2 + Math.tan(da)*projDist;
+    const h=projDist/d*s.scale, w=h*0.7;
+    const bot=horizon+eyeZ*projDist/d, top=bot-h;
+    if(s.proj){
+      const r=Math.max(2, h*0.12);
+      sctx.fillStyle=s.proj==='rocket'?'#ff8844':s.proj==='plasma'?'#66ccff':'#44ff66';
+      sctx.beginPath(); sctx.arc(sx, bot-h*0.5, r, 0, 6.29); sctx.fill();
+      sctx.fillStyle='#ffffff'; sctx.beginPath(); sctx.arc(sx, bot-h*0.5, r*0.45, 0, 6.29); sctx.fill();
+      continue;
     }
-    if(s.stag) put(sx, top-2, '!', '#ffd75e'); // staggered marker
+    const level=s.flash>0?0:(d<4?0:d<9?1:2);
+    const img=s.cv[level];
+    if(s.stag){
+      sctx.fillStyle='rgba(255,215,94,0.25)';
+      sctx.beginPath(); sctx.arc(sx, bot-h/2, w*0.6, 0, 6.29); sctx.fill();
+    }
+    const x0=Math.max(0, Math.floor((sx-w/2)/CHAR_W)), x1=Math.min(nCols-1, Math.floor((sx+w/2)/CHAR_W));
+    for(let ci=x0;ci<=x1;ci++){
+      if(d>zbuf[ci]+0.2) continue;
+      const srcX=(ci*CHAR_W-(sx-w/2))/w*img.width;
+      sctx.drawImage(img, srcX, 0, CHAR_W/w*img.width, img.height, ci*CHAR_W, top, CHAR_W, h);
+    }
+    if(s.stag){
+      sctx.font='bold '+Math.round(h*0.22)+'px monospace'; sctx.fillStyle='#ffd75e'; sctx.textAlign='center';
+      sctx.fillText('!', sx, top-h*0.06);
+      sctx.textAlign='left';
+    }
     if(s.hp!==undefined){
-      const bw=7, bx=sx-(bw>>1), by=top-1;
-      for(let i=0;i<bw;i++) put(bx+i,by, i/bw<s.hp?'█':'░','#ff6060');
+      const bw=w*0.7, bx=sx-bw/2, by=top-8;
+      sctx.fillStyle='#222'; sctx.fillRect(bx,by,bw,4);
+      sctx.fillStyle='#ff6060'; sctx.fillRect(bx,by,bw*s.hp,4);
     }
   }
-  // meat-hook chain: 'o' cells from screen centre to the latched enemy
+  // meat-hook chain: dots from screen centre to the latched enemy
   if(hookT>0&&hookTarget&&!hookTarget.dead){
     const hdx=hookTarget.x-player.x, hdy=hookTarget.y-player.y;
     let hda=Math.atan2(hdy,hdx)-player.ang; while(hda>Math.PI)hda-=2*Math.PI; while(hda<-Math.PI)hda+=2*Math.PI;
-    if(Math.abs(hda)<fov/2+0.3){
-      const hsx=Math.floor((0.5+hda/fov)*COLS), cx0=Math.floor(COLS/2), st=hsx>cx0?1:-1;
-      for(let x=cx0; x!==hsx; x+=st*3) put(x, horizon, 'o', '#c0c0c0');
-      put(hsx, horizon, 'O', '#ffd75e');
+    if(Math.abs(hda)<FOV/2+0.3){
+      const hsx=SW/2 + Math.tan(hda)*projDist, cx0=SW/2, st=hsx>cx0?1:-1;
+      sctx.fillStyle='#c0c0c0';
+      for(let x=cx0; st>0?x<hsx:x>hsx; x+=st*14){ sctx.beginPath(); sctx.arc(x, horizon, 3, 0, 6.29); sctx.fill(); }
+      sctx.fillStyle='#ffd75e'; sctx.beginPath(); sctx.arc(hsx, horizon, 5, 0, 6.29); sctx.fill();
     }
   }
-  // weapon (bottom centre, drawn 2x so it stays chunky at 180 cols) + muzzle flash
-  const wArt=WEAPON_ART[player.weapon];
-  const wBob=Math.round(Math.sin(bobT*2*Math.PI/1.83)*bobU/41*(VIEW_ROWS/2)*0.5);
-  const wx=Math.floor(COLS/2)-8, wy=VIEW_ROWS-wArt.length*2-1+wBob; // weapon sits just above the HUD bar
-  for(let y=0;y<wArt.length;y++) for(let x=0;x<wArt[y].length;x++){ const ch=wArt[y][x]; if(ch!==' ') { put(wx+x*2,wy+y*2,ch, flash>0?'#ffd75e':'#c8c8c8'); put(wx+x*2+1,wy+y*2,ch, flash>0?'#ffd75e':'#c8c8c8'); put(wx+x*2,wy+y*2+1,ch, flash>0?'#ffd75e':'#c8c8c8'); put(wx+x*2+1,wy+y*2+1,ch, flash>0?'#ffd75e':'#c8c8c8'); } }
-  if(flash>0){ put(Math.floor(COLS/2), wy-1, '*', '#ffffff'); put(Math.floor(COLS/2)+1, wy-1, '*', '#ffd75e'); put(Math.floor(COLS/2), wy-2, '*', '#ffd75e'); put(Math.floor(COLS/2)-1, wy-1, '*', '#ffd75e'); }
+  // blit the overscanned scene, panning the window by the bob/shake
+  const bx=Math.max(0,Math.min(2*OX, OX+bobX+shX)), by=Math.max(0,Math.min(2*OY, OY+bobY+shY));
+  ctx.drawImage(scene, bx, by, VW, VH, 0, 0, VW, VH);
+  // weapon viewmodel (Doom-style sprite, bottom centre) + muzzle flash
+  const gun=GUN_SPR[WEAPONS[player.weapon].key]||GUN_SPR['2'];
+  const gw=VW*0.34, gh=gw*0.75;
+  const wBob=Math.sin(bobT*2*Math.PI/1.83)*bobU*1.2;
+  const gx=(VW-gw)/2 + Math.sin(bobT*2*Math.PI/1.83)*bobU*0.5, gy=VH-gh+8+wBob;
+  ctx.drawImage(gun, gx, gy, gw, gh);
+  if(flash>0){
+    const mx=gx+gw/2, my=gy+gh*0.12, fs=gw*0.06;
+    ctx.fillStyle='#ffd75e';
+    ctx.beginPath();
+    ctx.moveTo(mx,my-fs*3); ctx.lineTo(mx+fs,my-fs); ctx.lineTo(mx+fs*3,my); ctx.lineTo(mx+fs,my+fs); ctx.lineTo(mx,my+fs*3); ctx.lineTo(mx-fs,my+fs); ctx.lineTo(mx-fs*3,my); ctx.lineTo(mx-fs,my-fs);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(mx,my,fs*0.7,0,6.29); ctx.fill();
+  }
   // HUD — Doom/Wolf3D status bar along the bottom (see drawHud)
   drawHud();
   // Wolf3D elevator prompt: press E at the exit tile
-  for(const it of items) if(!it.taken&&it.kind==='exit'&&Math.hypot(it.x-player.x,it.y-player.y)<2.5) drawText(Math.floor(COLS/2)-14, VIEW_ROWS-14, 'ELEVATOR — press E to descend', '#7ee081');
-  if(padName) drawText(COLS-28,0,'PAD: '+padName.slice(0,22), '#7ee081');
+  for(const it of items) if(!it.taken&&it.kind==='exit'&&Math.hypot(it.x-player.x,it.y-player.y)<2.5) ctext('ELEVATOR — press E to descend', VH*0.72, '#7ee081', Math.round(16*k)+'px monospace');
+  if(padName){ ctx.font=Math.round(12*k)+'px monospace'; ctx.textAlign='right'; ctx.fillStyle='#7ee081'; ctx.fillText('PAD: '+padName.slice(0,22), VW-12, 16); ctx.textAlign='left'; }
   // glory-kill prompt: a staggered enemy in range
   for(const e of enemies) if(!e.dead&&e.staggered&&Math.hypot(e.x-player.x,e.y-player.y)<2.5){
-    drawText(Math.floor(COLS/2)-19, VIEW_ROWS-12, 'STAGGERED — press E for GLORY KILL', '#ffd75e'); break;
+    ctext('STAGGERED — press E for GLORY KILL', VH*0.76, '#ffd75e', Math.round(16*k)+'px monospace'); break;
   }
   if(gloryT>0){
     overlayText('GLORY KILL', '#ffd75e');
-    drawText(Math.floor((COLS-gloryLine.length)/2), Math.floor(VIEW_ROWS/2)+2, gloryLine, '#ffffff');
+    ctext(gloryLine, VH*0.55, '#ffffff', Math.round(16*k)+'px monospace');
   }
-  // minimap top-right
-  const mw=28, mh=28, ox=COLS-mw-1, oy=5;
-  for(let my=0;my<mh;my++) for(let mx=0;mx<mw;mx++){
-    const gx=Math.floor(mx/mw*mapW), gy=Math.floor(my/mh*mapH);
-    put(ox+mx,oy+my, grid[gy][gx]>0?'#':'.', grid[gy][gx]>0?'#555':'#222');
+  // minimap: rotating radar, top-left, half the old size, fog of war
+  const mmSize=Math.round(120*k), mmX=12, mmY=12, range=8, cell=mmSize/(range*2);
+  const fx=player.x-px, fy=player.y-py;
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(mmX,mmY,mmSize,mmSize);
+  ctx.beginPath(); ctx.rect(mmX,mmY,mmSize,mmSize); ctx.clip();
+  ctx.translate(mmX+mmSize/2, mmY+mmSize/2);
+  ctx.rotate(-Math.PI/2 - player.ang); // player facing = up
+  for(let dy=-range;dy<=range;dy++) for(let dx=-range;dx<=range;dx++){
+    const gx=px+dx, gy=py+dy;
+    if(gx<0||gy<0||gx>=mapW||gy>=mapH) continue;
+    if(!seen[gy*64+gx]) continue; // fog of war: unseen stays black
+    ctx.fillStyle=grid[gy][gx]>0?'#555':'#222';
+    ctx.fillRect((dx-fx)*cell, (dy-fy)*cell, cell+0.5, cell+0.5);
   }
-  put(ox+Math.floor(player.x/mapW*mw), oy+Math.floor(player.y/mapH*mh), '@', '#ffd75e');
-  for(const e of enemies) if(!e.dead) put(ox+Math.floor(e.x/mapW*mw), oy+Math.floor(e.y/mapH*mh), 'x', '#ff6060');
-  for(const it of items) if(!it.taken&&it.kind==='exit') put(ox+Math.floor(it.x/mapW*mw), oy+Math.floor(it.y/mapH*mh), 'E', '#7ee081');
-  // logs bottom-left above weapon
-  logs.forEach((m,i)=>drawText(0, VIEW_ROWS-6+i, m.slice(0,90), '#888888'));
+  for(const it of items) if(!it.taken&&it.kind==='exit'){
+    const ex=it.x-player.x, ey=it.y-player.y;
+    if(Math.abs(ex)>range||Math.abs(ey)>range) continue;
+    ctx.fillStyle='#7ee081'; ctx.fillRect(ex*cell-2, ey*cell-2, 4, 4);
+  }
+  for(const e of enemies) if(!e.dead){
+    const ex=e.x-player.x, ey=e.y-player.y;
+    if(Math.abs(ex)>range||Math.abs(ey)>range) continue;
+    ctx.fillStyle='#ff6060'; ctx.fillRect(ex*cell-2, ey*cell-2, 4, 4);
+  }
+  ctx.restore();
+  ctx.fillStyle='#ffd75e'; // player arrow, fixed, pointing up
+  ctx.beginPath(); ctx.moveTo(mmX+mmSize/2, mmY+mmSize/2-6); ctx.lineTo(mmX+mmSize/2-5, mmY+mmSize/2+5); ctx.lineTo(mmX+mmSize/2+5, mmY+mmSize/2+5); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#555'; ctx.strokeRect(mmX,mmY,mmSize,mmSize);
+  // logs bottom-left above the HUD
+  ctx.font=Math.round(12*k)+'px monospace'; ctx.textAlign='left'; ctx.fillStyle='#888888';
+  logs.forEach((m,i)=>ctx.fillText(m.slice(0,90), 12, VH-(logs.length-i)*Math.round(14*k)-6));
   // overlays
   if(state==='title') overlayTitle();
   if(state==='levelup'||state==='floorclear') overlayChoices();
   if(state==='dead') overlayDead();
   if(state==='paused') overlayText('PAUSED — press P to resume', '#ffd75e');
-  // blit buffer to canvas, run-length: one fillText per run of the
-  // same foreground+background pair, with a fillRect for the run's
-  // background colour. At 180x75 (13,500 cells) per-cell drawing
-  // would be ~13k text calls/frame; runs collapse floor/ceiling/
-  // wall spans to a few hundred calls instead.
-  ctx.fillStyle='#000'; ctx.fillRect(0,0,cv.width,cv.height);
-  const ox2=shake>0?rr(-shake,shake)*2:0, oy2=(shake>0?rr(-shake,shake)*2:0)+Math.round(bobRows*CH);
-  for(let y=0;y<ROWS;y++){
-    // view bob + damage shake move only the 3D view — the HUD bar
-    // is a Doom status bar, it stays bolted to the bottom of the screen
-    const rox=y<VIEW_ROWS?ox2:0, roy=y<VIEW_ROWS?oy2:0;
-    let runCol=col[y][0], runBg=bg[y][0], runStr=buf[y][0]===undefined?' ':buf[y][0], runX=0;
-    for(let x=1;x<=COLS;x++){
-      if(x===COLS||col[y][x]!==runCol||bg[y][x]!==runBg){
-        if(runStr.trim()){
-          if(runBg!=='#000000'){ ctx.fillStyle=runBg; ctx.fillRect(runX*CW+rox, y*CH+roy, (x-runX)*CW, CH); }
-          ctx.fillStyle=runCol; ctx.fillText(runStr, runX*CW+rox, y*CH+roy);
-        } else if(runBg!=='#000000'){
-          ctx.fillStyle=runBg; ctx.fillRect(runX*CW+rox, y*CH+roy, (x-runX)*CW, CH);
-        }
-        if(x<COLS){ runCol=col[y][x]; runBg=bg[y][x]; runStr=buf[y][x]===undefined?' ':buf[y][x]; runX=x; }
-      } else runStr+=buf[y][x]===undefined?' ':buf[y][x];
-    }
-  }
 }
 function maxHpSafe(e){ return e.maxHp||1; }
-// --- Doom/Wolf3D status bar: 10 rows at the bottom of the buffer ---
-// Face in the middle (Doom), health/armor/ammo on the left, score /
-// floor / keys on the right, XP bar along the very bottom edge.
-// Values are drawn twice (two rows) so they read as chunky numerals.
+function ctext(s, y, c, font){ ctx.font=font; ctx.textAlign='center'; ctx.fillStyle=c; ctx.fillText(s, VW/2, y); ctx.textAlign='left'; }
+// --- Doom/Wolf3D status bar along the bottom ---
+// Bungee Tint for the labels and big values (it is a colour font, so
+// its own orange/red palette shows; fillStyle only applies if the font
+// has not loaded and monospace is used instead). The health/armor bars
+// below do the colour coding. The face stays monospace — Bungee Tint
+// has no box-drawing glyphs.
 function drawHud(){
-  const y0=VIEW_ROWS, BG='#1c1c22';
-  for(let y=y0;y<ROWS;y++) for(let x=0;x<COLS;x++) put(x,y,' ','#000',BG);
-  for(let x=0;x<COLS;x++) put(x,y0,'─','#555555',BG);
+  const BG='#1c1c22', y0=VH, k=VW/1080;
+  ctx.fillStyle=BG; ctx.fillRect(0,y0,VW,HUD_PX);
+  ctx.fillStyle='#555555'; ctx.fillRect(0,y0,VW,2);
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  const labF='bold '+Math.round(13*k)+'px "Bungee Tint", monospace';
+  const valF='bold '+Math.round(20*k)+'px "Bungee Tint", monospace';
+  const smF=Math.round(12*k)+'px monospace';
   const hpC=player.hp>=50?'#7ee081':player.hp>=25?'#ffd75e':'#ff6060';
   const hpS=String(Math.ceil(player.hp)), armS=String(Math.floor(player.armor));
   const hw=WEAPONS[player.weapon];
   const ammoS=hw.ammoType?String(player.ammo[hw.ammoType]):'∞';
   // left: health / armor / ammo
-  drawText(2,y0+1,'HEALTH','#888888',BG);
-  drawText(2,y0+3,hpS+'%',hpC,BG); drawText(2,y0+4,hpS+'%',hpC,BG);
-  const hb=Math.round(16*player.hp/player.maxHp);
-  for(let i=0;i<16;i++) put(2+i,y0+6, i<hb?'█':'░', hpC, BG);
-  drawText(24,y0+1,'ARMOR','#888888',BG);
-  drawText(24,y0+3,armS,'#7ee081',BG); drawText(24,y0+4,armS,'#7ee081',BG);
-  const ab=Math.round(16*player.armor/100);
-  for(let i=0;i<16;i++) put(24+i,y0+6, i<ab?'█':'░', '#7ee081', BG);
-  drawText(46,y0+1,hw.name,'#888888',BG);
-  drawText(46,y0+3,ammoS,'#ffd75e',BG); drawText(46,y0+4,ammoS,'#ffd75e',BG);
-  drawText(46,y0+6,(hw.ammoType?hw.ammoType.toUpperCase():'MELEE')+'  BOMBS '+player.bombs+'  DASH '+(player.dashCd<=0?'READY':Math.ceil(player.dashCd)+'s')+(player.weapon===3?'  HOOK '+(hookCd<=0?'READY':Math.ceil(hookCd)+'s'):''),'#c0c0c0',BG);
-  // face (Doom): centre, ASCII eyes + mouth reacting to health,
-  // recent hurt and glory kills — no emoji, they broke the blit
+  ctx.font=labF; ctx.fillStyle='#888888'; ctx.fillText('HEALTH', 12*k, y0+6*k);
+  ctx.font=valF; ctx.fillStyle=hpC; ctx.fillText(hpS+'%', 12*k, y0+22*k);
+  ctx.fillStyle=hpC; ctx.fillRect(12*k, y0+50*k, 150*k*Math.max(0,player.hp/player.maxHp), 10*k);
+  ctx.fillStyle='#333'; ctx.fillRect(12*k+150*k*Math.max(0,player.hp/player.maxHp), y0+50*k, 150*k*(1-Math.max(0,player.hp/player.maxHp)), 10*k);
+  ctx.font=labF; ctx.fillStyle='#888888'; ctx.fillText('ARMOR', 180*k, y0+6*k);
+  ctx.font=valF; ctx.fillStyle='#7ee081'; ctx.fillText(armS, 180*k, y0+22*k);
+  ctx.fillStyle='#7ee081'; ctx.fillRect(180*k, y0+50*k, 150*k*Math.min(1,player.armor/100), 10*k);
+  ctx.fillStyle='#333'; ctx.fillRect(180*k+150*k*Math.min(1,player.armor/100), y0+50*k, 150*k*(1-Math.min(1,player.armor/100)), 10*k);
+  ctx.font=labF; ctx.fillStyle='#888888'; ctx.fillText(hw.name.toUpperCase(), 350*k, y0+6*k);
+  ctx.font=valF; ctx.fillStyle='#ffd75e'; ctx.fillText(ammoS, 350*k, y0+22*k);
+  ctx.font=smF; ctx.fillStyle='#c0c0c0';
+  ctx.fillText((hw.ammoType?hw.ammoType.toUpperCase():'MELEE')+'  BOMBS '+player.bombs+'  DASH '+(player.dashCd<=0?'READY':Math.ceil(player.dashCd)+'s')+(player.weapon===3?'  HOOK '+(hookCd<=0?'READY':Math.ceil(hookCd)+'s'):''), 350*k, y0+50*k);
+  // face (Doom): centre, monospace eyes + mouth reacting to health,
+  // recent hurt and glory kills
   let eyes='o o', mouth='___';
   if(state==='dead'||player.hp<=0){ eyes='X X'; mouth='___'; }
   else if(gloryT>0){ eyes='^ ^'; mouth='\\_/'; }
@@ -1433,32 +1577,29 @@ function drawHud(){
   else if(player.hp<25){ eyes='x x'; mouth=' o '; }
   else if(player.hp<50){ eyes='o o'; mouth=' o '; }
   else if(player.hp<75){ eyes='o o'; mouth=' ~ '; }
-  const fx=Math.floor(COLS/2)-3, fy=y0+1;
-  drawText(fx,fy,'┌─────┐','#888888',BG);
-  drawText(fx,fy+1,'│     │','#888888',BG);
-  drawText(fx,fy+2,'│ '+eyes+' │','#ffffff',BG);
-  drawText(fx,fy+3,'│  |  │','#888888',BG);
-  drawText(fx,fy+4,'│ '+mouth+' │','#ffffff',BG);
-  drawText(fx,fy+5,'│     │','#888888',BG);
-  drawText(fx,fy+6,'└─────┘','#888888',BG);
+  const faceF=Math.round(11*k)+'px monospace';
+  const fx=VW/2-Math.round(23*k), fy=y0+4*k;
+  ctx.font=faceF;
+  const faceRows=['┌─────┐','│     │','│ '+eyes+' │','│  |  │','│ '+mouth+' │','│     │','└─────┘'];
+  faceRows.forEach((row,i)=>{ ctx.fillStyle=i===2||i===4?'#ffffff':'#888888'; ctx.fillText(row, fx, fy+i*Math.round(11*k)); });
   // right: score / floor / keys / music
-  drawText(100,y0+1,'SCORE','#888888',BG);
-  drawText(100,y0+3,String(player.score),'#ffffff',BG); drawText(100,y0+4,String(player.score),'#ffffff',BG);
-  drawText(100,y0+6,'KILLS '+player.kills+'  GOLD '+player.gold,'#c0c0c0',BG);
-  drawText(122,y0+1,'FLOOR '+depth+' '+theme.name.toUpperCase(),'#888888',BG);
-  drawText(122,y0+3,'LV '+player.level+'  LIVES '+player.extraLives+'  GLORY '+player.gloryKills,'#c0c0c0',BG);
-  drawText(122,y0+4,'KEYS '+(player.keys&1?'GOLD':'—'),'#ffd75e',BG);
-  drawText(122,y0+6,'AMMO B'+player.ammo.bullets+' S'+player.ammo.shells+' R'+player.ammo.rockets+' C'+player.ammo.cells,'#c0c0c0',BG);
-  drawText(150,y0+1,muted?'MUTED':'MUSIC '+(music.current?music.current.toUpperCase():'—'),'#888888',BG);
-  drawText(150,y0+3,'SEED '+runSeed,'#888888',BG);
-  drawText(150,y0+4,'M mute  P pause','#888888',BG);
+  ctx.font=labF; ctx.fillStyle='#888888'; ctx.fillText('SCORE', 640*k, y0+6*k);
+  ctx.font=valF; ctx.fillStyle='#ffffff'; ctx.fillText(String(player.score), 640*k, y0+22*k);
+  ctx.font=smF; ctx.fillStyle='#c0c0c0'; ctx.fillText('KILLS '+player.kills+'  GOLD '+player.gold, 640*k, y0+50*k);
+  ctx.font=labF; ctx.fillStyle='#888888'; ctx.fillText('FLOOR '+depth+' '+theme.name.toUpperCase(), 800*k, y0+6*k);
+  ctx.font=smF; ctx.fillStyle='#c0c0c0';
+  ctx.fillText('LV '+player.level+'  LIVES '+player.extraLives+'  GLORY '+player.gloryKills, 800*k, y0+24*k);
+  ctx.fillStyle='#ffd75e'; ctx.fillText('KEYS '+(player.keys&1?'GOLD':'—'), 800*k, y0+40*k);
+  ctx.fillStyle='#c0c0c0'; ctx.fillText('AMMO B'+player.ammo.bullets+' S'+player.ammo.shells+' R'+player.ammo.rockets+' C'+player.ammo.cells, 800*k, y0+56*k);
+  ctx.font=labF; ctx.fillStyle='#888888'; ctx.fillText(muted?'MUTED':'MUSIC '+(music.current?music.current.toUpperCase():'—'), 980*k, y0+6*k);
+  ctx.font=smF; ctx.fillStyle='#888888'; ctx.fillText('SEED '+runSeed, 980*k, y0+24*k);
+  ctx.fillText('M mute  P pause', 980*k, y0+40*k);
   // XP bar along the very bottom edge
-  const xpF=Math.floor(COLS*player.xp/player.xpNext);
-  for(let i=0;i<COLS;i++) put(i,ROWS-1, i<xpF?'█':'░', '#7ee081', BG);
+  ctx.fillStyle='#333'; ctx.fillRect(0, y0+HUD_PX-6, VW, 6);
+  ctx.fillStyle='#7ee081'; ctx.fillRect(0, y0+HUD_PX-6, VW*player.xp/player.xpNext, 6);
 }
-function maxHpSafe(e){ return e.maxHp||1; }
 function overlayText(s,c){
-  drawText(Math.floor((COLS-s.length)/2), Math.floor(VIEW_ROWS/2), s, c);
+  ctext(s, VH*0.5, c, 'bold '+Math.round(20*VW/1080)+'px "Bungee Tint", monospace');
 }
 function overlayTitle(){
   const lines=[
@@ -1467,6 +1608,7 @@ function overlayTitle(){
     "| | | \\ \\ /\\ / /|  _| | |_) || |  \\ V /\\___ \\ | | |  _|  | ||  \\| |",
     "| |_| |\\ V  V / | |___|  _ < | |   | |  ___) || | | |___ | || |\\  |",
     " \\__\\_\\ \\_/\\_/  |_____|_| \\_\\|_|   |_| |____/ |_| |_____|___|_| \\_|",
+
     '',
     'A WOLFENSTEIN-STYLE RAYCASTER IN DENSE ASCII ART',
     'Procedural floors. Roguelike runs. Permadeath. No mercy.',
@@ -1480,21 +1622,22 @@ function overlayTitle(){
     '',
     '>>> CLICK HERE, then press ENTER to start <<<',
   ];
-  const y0=4;
-  lines.forEach((s,i)=>drawText(Math.floor((COLS-s.length)/2), y0+i, s, i<5?'#ffd75e':i===15?'#7ee081':'#d8d8c8'));
+  const k=VW/1080, fs=Math.round(15*k);
+  lines.forEach((s,i)=>ctext(s, 30+i*fs*1.15, i<5?'#ffd75e':i===16?'#7ee081':'#d8d8c8', (i<5?'bold ':'')+fs+'px monospace'));
 }
 function overlayChoices(){
+  const k=VW/1080;
   const title=state==='floorclear'?'FLOOR '+depth+' CLEAR — CHOOSE AN UPGRADE, THEN DESCEND':'LEVEL UP — CHOOSE AN UPGRADE';
-  drawText(Math.floor((COLS-title.length)/2), 8, title, '#ffd75e');
+  ctext(title, 80*k, '#ffd75e', Math.round(22*k)+'px "Bungee Tint", monospace');
   levelChoices.forEach((u,i)=>{
     const s=(i===choiceSel?'> ':'  ')+'['+(i+1)+'] '+u.name+' — '+u.desc;
-    drawText(Math.floor((COLS-s.length)/2), 11+i*2, s, i===choiceSel?'#ffd75e':'#7ee081');
+    ctext(s, 130*k+i*34*k, i===choiceSel?'#ffd75e':'#7ee081', Math.round(16*k)+'px monospace');
   });
-  drawText(Math.floor((COLS-28)/2), 18, 'Press 1, 2 or 3 to choose', '#c0c0c0');
-  if(padName) drawText(0, ROWS-1, 'JOYPAD: '+padName.slice(0,30)+' — LB/RB pick, A confirm', '#7ee081');
+  ctext('Press 1, 2 or 3 to choose', 130*k+levelChoices.length*34*k+20*k, '#c0c0c0', Math.round(14*k)+'px monospace');
+  if(padName){ ctx.font=Math.round(12*k)+'px monospace'; ctx.textAlign='left'; ctx.fillStyle='#7ee081'; ctx.fillText('JOYPAD: '+padName.slice(0,30)+' — LB/RB pick, A confirm', 12, VH+HUD_PX-14); }
 }
 function overlayDead(){
-  const b=best();
+  const b=best(), k=VW/1080;
   const lines=[
     'YOU DIED ON FLOOR '+depth,
     '',
@@ -1504,13 +1647,14 @@ function overlayDead(){
     'The castle forgets you. The seed does not.',
     'Press N for a new run (new seed, new castle)',
   ];
-  lines.forEach((s,i)=>drawText(Math.floor((COLS-s.length)/2), 14+i, s, i===0?'#ff6060':'#d8d8c8'));
+  lines.forEach((s,i)=>ctext(s, VH*0.3+i*28*k, i===0?'#ff6060':'#d8d8c8', Math.round(18*k)+'px monospace'));
 }
 // --- input ---
 document.addEventListener('keydown', e=>{
   unlockAudio();
   keys[e.code]=true;
   if(e.code==='Space'){ e.preventDefault(); if(state==='play') spaceEdge=true; }
+  if(state==='play'&&(e.code==='ArrowUp'||e.code==='ArrowDown')) e.preventDefault(); // pitch, not page scroll
   if(state==='title'&&(e.code==='Enter'||e.code==='Space')){ newRun(); return; }
   if(state==='dead'&&e.code==='KeyN'){ newRun(); return; }
   if(e.code==='KeyP'&&state==='play'){ state='paused'; return; }
@@ -1530,11 +1674,14 @@ cv.addEventListener('click', ()=>{
   unlockAudio();
   if(state==='title'){ newRun(); return; }
   if(state==='play'){
-    try{ cv.requestPointerLock(); }catch(e){}
+    // Pointer lock first, shoot second: a click that re-locks must not
+    // also fire, and double-clicking to shoot must never toggle
+    // fullscreen (the old dblclick handler did exactly that).
+    if(document.pointerLockElement!==cv){ try{ cv.requestPointerLock(); }catch(e){} return; }
     firing=true; tryShoot(); setTimeout(()=>firing=false,120);
   }
 });
-document.addEventListener('mousemove', e=>{ if(document.pointerLockElement===cv) mouseDX+=e.movementX; });
+document.addEventListener('mousemove', e=>{ if(document.pointerLockElement===cv){ mouseDX+=e.movementX; mouseDY+=e.movementY; } });
 document.addEventListener('mouseup', ()=>{ firing=false; });
 document.addEventListener('pointerlockchange', ()=>{ if(document.pointerLockElement!==cv) mouseDX=0; });
 // touch buttons
@@ -1569,25 +1716,25 @@ if(stickEl) bindPad(stickEl, document.getElementById('stickNub'), (dx,dy)=>{ sti
 if(lookEl){
   let lx=0, ly=0, lt=0;
   lookEl.addEventListener('touchstart', e=>{ const t=e.changedTouches[0]; lx=t.clientX; ly=t.clientY; lt=Date.now(); }, {passive:true});
-  lookEl.addEventListener('touchmove', e=>{ const t=e.changedTouches[0]; lookDX+=t.clientX-lx; lx=t.clientX; ly=t.clientY; }, {passive:true});
+  lookEl.addEventListener('touchmove', e=>{ const t=e.changedTouches[0]; lookDX+=t.clientX-lx; lookDY+=t.clientY-ly; lx=t.clientX; ly=t.clientY; }, {passive:true});
   lookEl.addEventListener('touchend', e=>{ if(Date.now()-lt<220) tryShoot(); });
 }
 // touch directly on the canvas: left half = move stick, right half = look / tap to fire
-let touchMoveId=null, touchMoveOX=0, touchMoveOY=0, touchLookId=null, touchLookX=0, touchLookT=0;
+let touchMoveId=null, touchMoveOX=0, touchMoveOY=0, touchLookId=null, touchLookX=0, touchLookY=0, touchLookT=0;
 cv.addEventListener('touchstart', e=>{
   e.preventDefault();
   if(state==='title'){ newRun(); return; }
   for(const t of e.changedTouches){
     const r=cv.getBoundingClientRect(), x=t.clientX-r.left;
     if(x<r.width/2&&touchMoveId===null){ touchMoveId=t.identifier; touchMoveOX=t.clientX; touchMoveOY=t.clientY; }
-    else if(touchLookId===null){ touchLookId=t.identifier; touchLookX=t.clientX; touchLookT=Date.now(); }
+    else if(touchLookId===null){ touchLookId=t.identifier; touchLookX=t.clientX; touchLookY=t.clientY; touchLookT=Date.now(); }
   }
 }, {passive:false});
 cv.addEventListener('touchmove', e=>{
   e.preventDefault();
   for(const t of e.changedTouches){
     if(t.identifier===touchMoveId){ let dx=(t.clientX-touchMoveOX)/60, dy=(t.clientY-touchMoveOY)/60; const m=Math.hypot(dx,dy); if(m>1){dx/=m;dy/=m;} stickVec={x:dx,y:dy}; }
-    if(t.identifier===touchLookId){ lookDX+=t.clientX-touchLookX; touchLookX=t.clientX; }
+    if(t.identifier===touchLookId){ lookDX+=t.clientX-touchLookX; lookDY+=t.clientY-touchLookY; touchLookX=t.clientX; touchLookY=t.clientY; }
   }
 }, {passive:false});
 const touchEnd=e=>{
@@ -1603,13 +1750,12 @@ function loop(t){
   if(state!=='play') pollPadMenus();
   if(state==='play') update(dt);
   else if(state==='title'&&!player){ // idle title backdrop: fake a level behind the title
-    if(!grid){ runSeed=42; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,ammo:{bullets:50,shells:16,rockets:10,cells:80},kills:0,score:0,gold:0,dead:false}; genLevel(1); player.ang+=dt*0.1; }
+    if(!grid){ runSeed=42; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,ammo:{bullets:50,shells:16,rockets:10,cells:80},kills:0,score:0,gold:0,dead:false,pitch:0,z:0,vz:0}; genLevel(1); player.ang+=dt*0.1; }
   }
   render();
   requestAnimationFrame(loop);
 }
 document.getElementById('fsbtn').addEventListener('click', toggleFullscreen);
-cv.addEventListener('dblclick', toggleFullscreen);
 resizeCanvas();
 state='title';
 requestAnimationFrame(loop);

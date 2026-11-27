@@ -1,6 +1,6 @@
 # QWERTYSTEIN
 
-A Wolfenstein-style raycaster rendered in **dense ASCII art**, running entirely in the browser. No build step, no assets, no libraries — one `index.html`.
+A Wolfenstein-style raycaster running entirely in the browser. No build step, no libraries — one `index.html` (plus a Google Fonts link for the HUD typeface). Walls are rendered the ojread/ascii-fps way: one ASCII character per ray column, stretched to the wall's full height at its regular width, so wall tops and bottoms are pixel-smooth. Enemies and guns are drawn sprites, Doom-style.
 
 Play it live: https://bthompson91.github.io/qwertystein/
 
@@ -8,22 +8,22 @@ Play it live: https://bthompson91.github.io/qwertystein/
 
 Open `index.html` in a browser, click, press Enter. Or play live at https://bthompson91.github.io/qwertystein/
 
-- **WASD** move, **mouse** look (click to lock), **← →** turn
+- **WASD** move, **mouse** look (click to lock), **← →** turn, **mouse Y / ↑ ↓** look up/down, **J** jump
 - **Click / Space** shoot
-- **1–5** weapons: Knife, Pistol, SMG, Shotgun, Chaingun
-- **R** reload, **Shift** run, **Q** dash, **T** throw a bomb
-- **P** pause, **M** mute, **N** new run (on death)
+- **1–8** weapons: Fist, Pistol, Shotgun, Super Shotgun, Chaingun, Rocket Launcher, Plasma Gun, BFG9000
+- **F** meat hook (Super Shotgun), **Shift** run, **Q** dash, **T** throw a bomb
+- **E** use (doors, pushwalls, elevator) / glory kill, **P** pause, **M** mute, **N** new run (on death)
 
 ### Phone
 
-On a touchscreen you get on-screen controls: a **MOVE** virtual stick (left pad), a **LOOK** pad (drag to turn, tap to fire), and FIRE / DASH / BOMB / WEAPON / RELOAD / PAUSE buttons. You can also touch the game itself: drag the left half to move, drag the right half to look, tap the right half to fire.
+On a touchscreen you get on-screen controls: a **MOVE** virtual stick (left pad), a **LOOK** pad (drag to turn and look up/down, tap to fire), and FIRE / DASH / BOMB / JUMP / WEAPON / HOOK / PAUSE buttons. You can also touch the game itself: drag the left half to move, drag the right half to look, tap the right half to fire.
 
 ### Joypad
 
 Yes — any standard gamepad works via the browser Gamepad API, no install needed. Plug in an Xbox, PlayStation, Switch Pro or 8BitDo pad (USB or Bluetooth) and press a button; the game shows its name in the HUD.
 
-- Left stick: move · Right stick: look
-- **RT or A**: fire (hold) · **X**: reload · **B**: dash · **Y**: bomb
+- Left stick: move · Right stick: look (push up/down to look up/down)
+- **RT or A**: fire (hold) · **X**: meat hook (Super Shotgun) · **B**: dash · **Y**: bomb
 - **LB / RB**: change weapon · **Start**: pause · **Back/Select**: mute
 - Upgrade screens: **LB / RB** to pick, **A** to confirm · Title / death screens: **A** to start a new run
 
@@ -41,7 +41,7 @@ Every floor is generated from the run seed: 8–10 rooms connected by corridors,
 
 ## Tech
 
-Raycasting (DDA, one ray per character column, fisheye-corrected), 8×8 ASCII wall tiles per wall type, ASCII billboard sprites with a per-column depth buffer, floor/ceiling ASCII gradients, and a minimap — all drawn as text on a canvas, 180 columns × 75 rows (13,500 cells, 3.09× the original 104×42), with run-length blitting so a frame is ~1,700 text draws instead of 13,500.
+Raycasting (DDA, one ray per character column, fisheye-corrected) drawn straight to a canvas. Walls use the ojread/ascii-fps trick — one ASCII character per column, pre-rendered to a small tile and stretched to the wall's full height, coloured from the floor theme's palette and distance-shaded. Floor and ceiling are flat-shaded bands. Enemies are drawn 3D-style billboard sprites (shaded figures that always face you, clipped per column against the wall depth buffer, with HP bars and a "!" when staggered); guns are Doom-style drawn viewmodel sprites with a muzzle flash. The scene is rendered to an offscreen canvas larger than the view (overscan) and view-bob just pans the window inside it, so bobbing never exposes a black border. The HUD is drawn in Bungee Tint. The minimap is a rotating radar (player facing is up) with fog of war, top-left, half the old size.
 
 ## Wolfenstein 3D logic
 
@@ -57,7 +57,7 @@ Ported, with file references in the code:
 - **Pushwalls** (`WL_ACT1.C`): press E facing a pushwall (tile 98) and it slides 2 tiles, revealing a secret alcove with treasure.
 - **Scoring / pickups** (`WL_AGENT.C`): treasure cross 100, chalice 500, bible 1000, crown 5000; first aid +25, food +10, clip +8 (cap 99); every 40,000 points (`EXTRAPOINTS`) grants an extra life, which revives you at 50 HP.
 
-Deliberate differences from Wolf3D: levels are procedurally generated instead of hand-made, runs are roguelike (permadeath, XP levels, upgrade picks between floors), and the screen is dense ASCII instead of textured walls. The chaingun/SMG fire faster than Wolf3D's 24-tic shots — that's the roguelike talking.
+Deliberate differences from Wolf3D: levels are procedurally generated instead of hand-made, runs are roguelike (permadeath, XP levels, upgrade picks between floors), and the screen is a canvas raycaster instead of textured walls. Enemy guns are nerfed from Wolf3D's tables (hit chance and damage roughly halved) — the originals were far too strong for this game's pacing. The chaingun/SMG fire faster than Wolf3D's 24-tic shots — that's the roguelike talking.
 
 ## Doom movement (linuxdoom-1.10)
 
@@ -70,21 +70,34 @@ slides ~1.26 tiles after a run stop, instead of the old instant
 3.4 / 5.1 tiles/s. Keyboard turning is Doom's too: 61.5 deg/s for the
 first 6 tics held, then 123 deg/s walk, 246.1 run. View bob follows
 `P_CalcHeight` (speed^2 capped at MAXBOB 16 units, 0.57s cycle, up to
-+/-8 units); weapon bob on the 1.83s `A_WeaponReady` cycle. Dash is a
++/-8 units) but is rendered at ~40% amplitude through the overscan
+(see Tech) — the old full bob was too much and exposed black borders.
+Weapon bob on the 1.83s `A_WeaponReady` cycle. Dash is a
 momentum impulse, not a speed multiplier. Player radius stays Wolf3D's
 0.34 tiles — the maps are Wolfenstein-scale.
 
+## Verticality
+
+Mouse Y, ArrowUp/ArrowDown, the touch LOOK pad and the gamepad right
+stick pitch the view up and down (about 23 degrees each way) by
+moving the horizon; **J** jumps with simple gravity (about 0.4 tiles
+high), which shifts the walls and floor through the eye height. The
+renderer is a full 2.5D raycaster, so pitch and jump are
+horizon/eye-height effects, not a new map axis — there are no stairs
+or multi-storey floors.
+
 ## Unicode + ASCII art
 
-The buffer carries a background colour per character, so walls, floor
-and ceiling are shaded per cell, not just black gaps between glyphs.
-Wall tiles use the full Unicode block / box-drawing set:
- brick,  stone,  wood,  metal,  vault,  sliding doors,
- pushwalls, alternating with shaded block rows (the block rows carry
-the distance shading). Sprites are ASCII art only:  guard,  officer,
- SS,  dog,  mutant,  Hans Grosse,  first aid,  food,  clip,
- gold key, ✝ cross,  chalice,  bible,  crown,  gold,  bomb,
- elevator exit.
+Walls are one ASCII character per column (▓ brick, █ stone, ▒ wood,
+█ metal, ▓ vault, █ door, ▒ pushwall), stretched to the wall's full
+height and coloured from the floor theme's palette with distance
+shading — the ojread/ascii-fps trick, so wall edges are pixel-smooth
+instead of stepping in character rows. Enemies and guns are drawn
+sprites, not ASCII: shaded 3D-style figures for guard, officer, SS,
+dog, mutant and Hans Grosse, and Doom-style viewmodels for all eight
+weapons. Items (first aid, food, clip, shells, rockets, cells, cross,
+chalice, bible, crown, gold key, bomb, elevator exit) are pixel-art
+icons rasterised from the old ASCII sprites.
 
 ## Doom Eternal glory kills
 
@@ -131,7 +144,7 @@ rocket box +5, cell pack +20. SS enemies drop shells. Starting ammo:
 latches onto the nearest enemy within 12 tiles in your facing cone
 and pulls you to it at 14 tiles/s, dealing 20 damage and setting it
 burning (Flaming Hook mastery: a burning enemy that dies drops +15
-armor). 3s cooldown, 2s if it misses. The chain is drawn as  cells
+armor). 3s cooldown, 2s if it misses. The chain is drawn as dots
 across the screen while you're latched.
 
 Deliberate differences from Doom: no rocket self-damage (close
@@ -161,19 +174,22 @@ tab, so music can stutter if you switch away mid-run.
 
 ## Fullscreen + Doom/Wolf HUD
 
-- **Fullscreen:** a [ FULLSCREEN ] button under the game (or
-  double-click the game, or F11) — when the browser is fullscreen the
+- **Fullscreen:** a [ FULLSCREEN ] button under the game (or F11) — when the browser is fullscreen the
   canvas resizes to fill the screen, keeping the game's 1080x600
   aspect (letterboxed) and scaling the character cells with it
   (up to 2x device pixel ratio for sharpness). Leaving fullscreen
   restores the in-page 1080x600 canvas. The page chrome (title, help
   text) hides in fullscreen; touch controls overlay the bottom.
-- **Bottom HUD:** the 3D view now occupies the top 65 rows and the
-  bottom 10 rows are a Doom/Wolf3D-style status bar — Doom's face in
-  the middle ( healthy,  hurt,  low,  critical,  just hit,
-   glory kill,  dead), HEALTH and ARMOR with chunky two-row
-  numerals and bars on the left, weapon + ammo in the middle-left,
-  SCORE / KILLS / GOLD / FLOOR / level / lives / glory kills / keys /
-  ammo totals on the right, the current song ( COMBAT / BOSS /
-  TITLE) or MUTED, and an XP bar along the very bottom edge. The old
-  top-of-screen HUD text is gone.
+  Clicking the game locks the mouse pointer (a click that re-locks
+  does not fire); double-clicking no longer toggles fullscreen — it
+  used to flip in and out of fullscreen every time you double-clicked
+  to shoot.
+- **Bottom HUD:** a Doom/Wolf3D-style status bar along the bottom of
+  the canvas, drawn in Bungee Tint (Google Fonts) — Doom's face in
+  the middle (healthy, hurt, low, critical, just hit, glory kill,
+  dead), HEALTH and ARMOR with big numerals and bars on the left,
+  weapon + ammo in the middle-left, SCORE / KILLS / GOLD / FLOOR /
+  level / lives / glory kills / keys / ammo totals on the right, the
+  current song (COMBAT / BOSS / TITLE) or MUTED, and an XP bar along
+  the very bottom edge. The face stays monospace (Bungee Tint has no
+  box-drawing glyphs). The HUD never bobs — only the 3D view moves.
