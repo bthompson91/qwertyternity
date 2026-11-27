@@ -1,6 +1,6 @@
 # QWERTYTERNITY
 
-An Eviternity-style raycaster running entirely in the browser. No build step, no libraries — one `index.html` (plus a Google Fonts link for the HUD typeface). It started life as QWERTYSTEIN (a Wolfenstein-style raycaster); it is now QWERTYTERNITY — Doom, but bigger, in the spirit of Eviternity: epic scale, grand halls, new monsters, and a heavenly Astral episode. Walls are Doom-style 64×64 texture slices, enemies are drawn sprites, and the floors have Doom-style sector heights (raised platforms, a boss dais). And it looks the part now: every episode has its own scrolling sky (the Astral episode's is a pink cloudy heaven), the walls carry glowing teal inlay and gold runes, and every floor is an outdoor-first map — you spawn in a big octagonal plaza with diagonal walls, glowing pillars and trees, with indoor rooms attached. The human enemies are knights (plate armour, great helms, crossbows) and the dogs are lions.
+An Eviternity-style raycaster running entirely in the browser. No build step, no libraries — one `index.html` (plus a Google Fonts link for the HUD typeface). It started life as QWERTYSTEIN (a Wolfenstein-style raycaster); it is now QWERTYTERNITY — Doom, but bigger, in the spirit of Eviternity: epic scale, grand halls, new monsters, and a heavenly Celestial episode. Walls are Doom-style 64×64 texture slices, enemies are drawn sprites, and the floors have Doom-style sector heights (raised platforms, a boss dais). And it looks the part now: every episode has its own scrolling sky (the Celestial episode's is a pink cloudy heaven), the walls carry glowing teal inlay and gold runes, and every floor is an outdoor-first map — you spawn in a big octagonal plaza with diagonal walls, glowing pillars and trees, with indoor rooms attached. The human enemies are knights (plate armour, great helms, crossbows) and the dogs are lions. The graphics were redone from research into Doom (1993) and Eviternity/OTEX: hue-shifted ramps (shadows lean blue/purple, highlights lean warm), dark panel borders with corner rivets, detail at the edges, glowing trim that stays bright, colour-coded pickups with dark outlines, and the real Eviternity chapter names.
 
 Play it live: https://bthompson91.github.io/qwertyternity/
 
@@ -33,7 +33,7 @@ Yes — any standard gamepad works via the browser Gamepad API, no install neede
 
 Every floor is generated from the run seed: you spawn outdoors in a big octagonal **plaza** (16–22 × 12–16 tiles, its corners chamfered off with 45° diagonal walls, 3–5 trees, glowing pillars, a platform), with up to 16 indoor rooms attached by corridors. The plaza has a 2.5-tall open sky above it; indoors the ceiling is flat and dark. Enemy count, health and damage scale with depth. The exit portal is always in the room farthest from your spawn.
 
-Floors run in **Eviternity episodes**, one theme per 4 floors: **Episode 1 — UAC Tech Base** (floors 1–4), **Episode 2 — Hell's Gate** (5–8), **Episode 3 — Gothic** (9–12), **Episode 4 — Astral** (13–16, the heavenly finale, with its own bright gold-and-white textures and an original heroic track), then the cycle repeats. A boss spawns every third floor: **the Knight Lord** on floors 3, 9, 15… and **the Annihilator** — Eviternity's big Baron — on every 6th floor.
+Floors run in **Eviternity episodes**, one theme per 4 floors, using the real Eviternity chapter names: **Episode 1 — Automation** (floors 1–4, the techbase), **Episode 2 — Descension** (5–8, hell), **Episode 3 — Archaic** (9–12, medieval), **Episode 4 — Celestial** (13–16, the heavenly finale, with its own bright gold-and-white textures and an original heroic track), then the cycle repeats. A boss spawns every third floor: **the Knight Lord** on floors 3, 9, 15… and **the Annihilator** — Eviternity's cyber-baron — on every 6th floor.
 
 ## Roguelike progression
 
@@ -45,7 +45,7 @@ Floors run in **Eviternity episodes**, one theme per 4 floors: **Episode 1 — U
 
 ## Tech
 
-Raycasting (DDA, one ray per character column, fisheye-corrected) drawn straight to a canvas. Walls are Doom-style 64×64 texture slices — brick, stone, wood, metal, vault, door, pushwall — one 1px-wide slice per ray column, pre-baked in 4 distance-shade levels and drawn nearest-neighbour so they stay crunchy. (The earlier ojread/ascii-fps stretched-character walls shimmered: the dithered glyphs moiré'd as they scaled and fractional column widths left seams, so they were replaced with real textures.) Above the walls, the ceiling is a scrolling sky panorama — a 2048×256 texture per episode, gradient + soft clouds, that pans with your view and sits on the horizon: dark blue-grey for the tech base, blood-red for Hell, grey cloud for Gothic, and a pink cloudy heaven for Astral. The floor is a distance-shaded band with a whisper of speckle grain. Floors have Doom sector heights: 1–2 raised platforms per floor (a 0.5 step you walk straight up) in tall rooms, and a dais under the boss on every 3rd floor — your eye rides the floor you're standing on, walls take their base and ceiling from the room you're in, and the floor is redrawn in strips where the height changes so the step faces read as dark risers. Enemies are drawn 3D-style billboard sprites (muted colours, hard dark outline, slit eyes under heavy brows, rifle aimed at you), clipped per column against the wall depth buffer, with HP bars and a "!" when staggered; guns are Doom-style drawn viewmodel sprites with a muzzle flash. The scene is rendered to an offscreen canvas larger than the view (overscan) and view-bob just pans the window inside it, so bobbing never exposes a black border. The HUD is drawn in Bungee Tint. The minimap is a rotating radar (player facing is up) with fog of war, top-left, half the old size.
+Raycasting (DDA, one ray per character column, fisheye-corrected) drawn straight to a canvas. Walls are Doom-style 64×64 texture slices — brick, stone, wood, metal, vault, door, pushwall — one 1px-wide slice per ray column, pre-baked in 4 distance-shade levels and drawn nearest-neighbour so they stay crunchy. (The earlier ojread/ascii-fps stretched-character walls shimmered: the dithered glyphs moiré'd as they scaled and fractional column widths left seams, so they were replaced with real textures.) Above the walls, the ceiling is a scrolling sky panorama — a 2048×256 texture per episode, gradient + soft clouds, that pans with your view and sits on the horizon: dark blue-grey for Automation, blood-red for Descension, grey cloud for Archaic, and a pink cloudy heaven for Celestial. The floor is a distance-shaded band with a whisper of speckle grain. Floors have Doom sector heights: 1–2 raised platforms per floor (a 0.5 step you walk straight up) in tall rooms, and a dais under the boss on every 3rd floor — your eye rides the floor you're standing on, walls take their base and ceiling from the room you're in, and the floor is redrawn in strips where the height changes so the step faces read as dark risers. Enemies are drawn 3D-style billboard sprites (muted colours, hard dark outline, slit eyes under heavy brows, rifle aimed at you), clipped per column against the wall depth buffer, with HP bars and a "!" when staggered; guns are Doom-style drawn viewmodel sprites with a muzzle flash. The scene is rendered to an offscreen canvas larger than the view (overscan) and view-bob just pans the window inside it, so bobbing never exposes a black border. The HUD is drawn in Bungee Tint. The minimap is a rotating radar (player facing is up) with fog of war, top-left, half the old size.
 
 ## Wolfenstein 3D logic
 
@@ -54,7 +54,7 @@ The gameplay logic is ported from the real Wolfenstein 3D source (id Software, 1
 Ported, with file references in the code:
 
 - **Maps** (`WL_DEF.H`, `WL_GAME.C`): 64×64 grid (`MAPSIZE 64`), tile codes for walls, doors (90–101), pushwalls (98), elevator (21), exit (99), ambush (106).
-- **Enemies** (`WL_ACT2.C`): **Knight** 25 HP / 100 pts, **Knight Captain** 50 / 400, **Dark Knight** 100 / 500, **Lion** 1 / 200, **Hedge Knight** 55 / 700, **the Knight Lord** 850 / 5000; drops (clip +4, the Knight Lord drops the gold key). Eviternity monsters: **Nightmare Demon** (from floor 2, 40 HP — a shadowy spectre that flickers in and out of sight, fast, bites), **Astral Cacodemon** (from floor 5, 120 HP — a floating red sphere that spits a spread of 3 fireballs), **the Annihilator** (every 6th floor, 1200 HP — a bulkier horned Baron that hurls green hellfire).
+- **Enemies** (`WL_ACT2.C`): **Knight** 25 HP / 100 pts, **Knight Captain** 50 / 400, **Dark Knight** 100 / 500, **Lion** 1 / 200, **Hedge Knight** 55 / 700, **the Knight Lord** 850 / 5000; drops (clip +4, the Knight Lord drops the gold key). Eviternity monsters: **Nightmare Demon** (from floor 2, 40 HP — a dark teal Demon that flickers in and out of sight, fast, bites, with a tail), **Astral Cacodemon** (from floor 5, 120 HP — a floating grey sphere that spits a spread of 3 fireballs), **the Annihilator** (every 6th floor, 1200 HP — a cyber-baron with a rocket launcher on one arm and a chaingun on the other, that hurls green hellfire).
 - **Enemy AI** (`WL_STATE.C`): `T_Stand` / `T_Path` / `T_Chase` / `T_Shoot` / `T_DogChase` / `T_Bite` state machine, `SightPlayer` reaction delays, `FirstSighting` speed multipliers, `CheckLine`, attack chance `(tics<<4)/dist`, shoot hit-chance and damage tables by distance, pain state (10 tics, dogs have none), damage doubled on unaware enemies.
 - **Weapons** (`WL_AGENT.C`): `GunAttack` hitscan pick + damage by distance (`dist<2: Rnd/4, dist<4: Rnd/6`), `KnifeAttack` (1.5 tiles, `Rnd>>4`), `ClipMove` wall sliding, `Cmd_Use` on **E**.
 - **Doors** (`WL_ACT1.C`): sliding doors, open ~3–4 s (`OPENTICS 300`), re-open if blocked, locks 1–4 needing keys, enemies open them too.
@@ -101,15 +101,15 @@ barred window, a pushwall with a carved statue face), tinted from the
 floor theme's palette, drawn one 1px-wide slice per ray column and
 nearest-neighbour so they stay crunchy. Each Eviternity episode has
 its own OTEX-style textures: the tech base uses clean panels with a
-glowing trim, Hell and Gothic use a pointed-arch gothic texture and a
+glowing trim, Descension and Archaic use a pointed-arch gothic texture and a
 pillar texture — dark stone columns with glowing teal inlay and a gold
-rune — and the Astral episode uses bright marble with gold veins and a
+rune — and the Celestial episode uses bright marble with gold veins and a
 gold rune. The door is a glowing gold portal. The plaza on every
-floor has four glowing pillars at its corners, and the Astral and
-Gothic rooms have trees. Enemies and guns are drawn
+floor has four glowing pillars at its corners, and the Celestial and
+Archaic rooms have trees. Enemies and guns are drawn
 sprites, not ASCII: knights in plate armour with great helms and crossbows (plain steel, gold-trimmed captain, black Dark Knight, green Hedge Knight, gold Knight Lord), a lion in profile with a big mane and a tail tuft — plus Eviternity's
-own monsters: a shadowy Nightmare Demon, a floating Astral Cacodemon,
-and the horned Annihilator — and Doom-style
+own monsters: a dark teal Nightmare Demon, a floating grey Astral Cacodemon,
+and the cyber-baron Annihilator — and Doom-style
 viewmodels for all eight weapons. Items (first aid, food, clip,
 shells, rockets, cells, cross, chalice, bible, crown, gold key, bomb,
 elevator exit) are pixel-art icons rasterised from the old ASCII sprites.
@@ -177,8 +177,8 @@ written for the game — no audio files, no libraries, no network.
   kick/snare/hats. Plays on normal floors.
 - **Boss** — 170 BPM, E minor, faster riff, syncopated kick. Plays on
   every 3rd floor (boss floors).
-- **Astral** — 140 BPM, D major, a bright heroic loop (lead, driving
-  bass, pad, drums) written for the Astral episode. Plays on floors
+- **Celestial** — 140 BPM, D major, a bright heroic loop (lead, driving
+  bass, pad, drums) written for the Celestial episode. Plays on floors
   13–16 (and every 4th episode after that).
 Music starts on the first key/click (browsers need a gesture for
 audio), switches per floor, and stops on death. M mutes everything.

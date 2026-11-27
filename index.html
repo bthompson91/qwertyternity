@@ -175,13 +175,13 @@ function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(rng()*(
 // Then the cycle repeats. Each theme lists the wall texture types
 // it uses (walls:), OTEX-style.
 const THEMES=[
- {name:'UAC TECH BASE', ep:1, wall:['#7a8a9a','#5a6a7a','#8a9aa8','#6a7a8a'], floor:'#2a2e34', ceil:'#14161c', fog:'#05060a', walls:[4,9],
+ {name:'AUTOMATION',    ep:1, wall:['#7a8a9a','#5a6a7a','#8a9aa8','#6a7a8a'], floor:'#2a2e34', ceil:'#14161c', fog:'#05060a', walls:[4,9],
   sky:['#0a0e18','#1a2436','#2a3a4a'], cloud:'#3a4a5a'},
- {name:"HELL'S GATE",   ep:2, wall:['#8a3a2a','#6a2a1a','#a04a2a','#7a3a3a'], floor:'#2e1a12', ceil:'#120a08', fog:'#080304',
-  sky:['#1a0505','#3a0a0a','#5a1a0a'], cloud:'#7a2a1a', walls:[1,8,11]},
- {name:'GOTHIC',        ep:3, wall:['#6a6a7a','#4a4a5a','#8a7a4a','#5a5a6a'], floor:'#1e1e26', ceil:'#0e0e14', fog:'#050508', walls:[2,8,11],
+ {name:'DESCENSION',    ep:2, wall:['#8a3a2a','#6a2a1a','#a04a2a','#7a3a3a'], floor:'#2e1a12', ceil:'#120a08', fog:'#080304',
+  sky:['#1a0505','#3a0a0a','#5a1a0a'], cloud:'#7a2a1a', walls:[1,8,11,12]},
+ {name:'ARCHAIC',       ep:3, wall:['#6a6a7a','#4a4a5a','#8a7a4a','#5a5a6a'], floor:'#1e1e26', ceil:'#0e0e14', fog:'#050508', walls:[2,8,11],
   sky:['#14141c','#33333e','#55555e'], cloud:'#7a7a88'},
- {name:'ASTRAL',        ep:4, wall:['#c8b060','#e8d8a0','#b8a05a','#d8c888'], floor:'#3a3424', ceil:'#1e1c12', fog:'#0a0805', walls:[5,10],
+ {name:'CELESTIAL',     ep:4, wall:['#c8b060','#e8d8a0','#b8a05a','#d8c888'], floor:'#3a3424', ceil:'#1e1c12', fog:'#0a0805', walls:[5,10],
   sky:['#7a1a2a','#b83a4a','#e86a6a'], cloud:'#f8b8b8'},
 ];
 // --- sky: a scrolling 2048x256 panorama per theme (gradient + soft
@@ -231,9 +231,40 @@ const NOISE=makeNoise();
 // gets a texture per floor theme (the theme's wall palette tints it)
 // in 4 pre-baked distance-shade levels, so a column is one drawImage.
 function makeWallTex(base, type){
+  // Doom/OTEX-style 64x64 textures, drawn from scratch in code.
+  // The look, from the research: chunky pixels, a small hue-shifted
+  // ramp per material (shadows lean blue/purple, highlights lean
+  // yellow/orange), strong dark panel borders with rivets in the
+  // corners, detail concentrated at the edges, a plain noisy centre,
+  // and glowing trim that stays bright (it is a light source, not a
+  // surface). No smooth gradients — shading is stepped/banded, with
+  // Bayer dithering only where a gradient is unavoidable.
   const c=mkCanvas(64,64), g=c.getContext('2d');
   const R=mulberry32(type*7919+13); // stable per-type variation
-  const blk=(x,y,w,h,f)=>{ g.fillStyle=shade2(base,f); g.fillRect(x,y,w,h); };
+  // hue-shifted ramp: f<1 darkens toward blue/purple, f>1 lightens toward warm yellow
+  const ramp=(hex,f)=>{
+    const n=parseInt(hex.slice(1),16);
+    let r=((n>>16)&255)*f, gg=((n>>8)&255)*f, b=(n&255)*f;
+    if(f<1){ b=Math.min(255,b+ (1-f)*22); r=Math.max(0,r-(1-f)*8); } // shadows go blue/purple
+    else { r=Math.min(255,r+(f-1)*28); gg=Math.min(255,gg+(f-1)*14); } // highlights go warm
+    return 'rgb('+Math.round(Math.min(255,r))+','+Math.round(Math.min(255,gg))+','+Math.round(Math.min(255,b))+')';
+  };
+  const blk=(x,y,w,h,f)=>{ g.fillStyle=ramp(base,f); g.fillRect(x,y,w,h); };
+  const rivet=(x,y)=>{ // a dark dot with a light top-left highlight
+    g.fillStyle='#0a0a0a'; g.fillRect(x,y,2,2);
+    g.fillStyle='rgba(255,255,255,0.35)'; g.fillRect(x,y,1,1);
+  };
+  const panel=(x,y,w,h,f)=>{ // a dark-bordered panel with corner rivets
+    g.fillStyle='#0a0a0a'; g.fillRect(x-1,y-1,w+2,h+2);
+    g.fillStyle=ramp(base,f); g.fillRect(x,y,w,h);
+    rivet(x+2,y+2); rivet(x+w-4,y+2); rivet(x+2,y+h-4); rivet(x+w-4,y+h-4);
+    g.fillStyle='rgba(255,255,255,0.14)'; g.fillRect(x,y,w,1); // top highlight
+    g.fillStyle='rgba(0,0,0,0.3)'; g.fillRect(x,y+h-2,w,2); // bottom shadow
+  };
+  const speckle=(n,alpha)=>{ // grime/noise speckle across a flat area
+    for(let i=0;i<n;i++){ g.fillStyle=R()<0.5?'rgba(0,0,0,'+alpha+')':'rgba(255,255,255,'+(alpha*0.6)+')';
+      g.fillRect(Math.floor(R()*64), Math.floor(R()*64), 1+R()*2|0, 1); }
+  };
   // Eviternity glow: a bright core strip with a soft halo behind it
   const glowStrip=(x,w,color)=>{ g.fillStyle=color; g.globalAlpha=0.25; g.fillRect(x-3,0,w+6,64);
     g.globalAlpha=1; g.fillRect(x,0,w,64); };
@@ -242,41 +273,51 @@ function makeWallTex(base, type){
     for(let a=0;a<4;a++){ const an=a*Math.PI/4;
       g.beginPath(); g.moveTo(x-Math.cos(an)*r, y-Math.sin(an)*r);
       g.lineTo(x+Math.cos(an)*r, y+Math.sin(an)*r); g.stroke(); } };
-  if(type===1){ // brick: 4 courses of 16px bricks, offset rows
-    g.fillStyle=shade2(base,0.45); g.fillRect(0,0,64,64); // mortar
+  if(type===1){ // brick: 4 courses, offset rows, dark mortar, chipped corners
+    g.fillStyle=ramp(base,0.45); g.fillRect(0,0,64,64); // mortar
     for(let row=0;row<4;row++){ const off=(row%2)*8;
-      for(let bx=-8;bx<64;bx+=16) blk(bx+off+1, row*16+1, 14, 14, 0.85+R()*0.3); }
-  } else if(type===2){ // stone: big 32x16 blocks
-    g.fillStyle=shade2(base,0.4); g.fillRect(0,0,64,64);
+      for(let bx=-8;bx<64;bx+=16){
+        blk(bx+off+1, row*16+1, 14, 14, 0.85+R()*0.3);
+        if(R()<0.3){ g.fillStyle='rgba(0,0,0,0.4)'; g.fillRect(bx+off+1+R()*8|0, row*16+1, 3, 3); } // a chip
+        g.fillStyle='rgba(255,255,255,0.10)'; g.fillRect(bx+off+1, row*16+1, 14, 1);
+      }
+    }
+    speckle(60,0.25);
+  } else if(type===2){ // stone: big 32x16 blocks, dark mortar, a crack
+    g.fillStyle=ramp(base,0.4); g.fillRect(0,0,64,64);
     for(let row=0;row<4;row++){ const off=(row%2)*16;
       for(let bx=-16;bx<64;bx+=32){ blk(bx+off+1, row*16+1, 30, 14, 0.8+R()*0.35);
         g.fillStyle='rgba(0,0,0,0.18)'; g.fillRect(bx+off+1, row*16+13, 30, 2); } }
-  } else if(type===3){ // wood: vertical planks
-    g.fillStyle=shade2(base,0.35); g.fillRect(0,0,64,64);
+    g.strokeStyle='rgba(0,0,0,0.5)'; g.lineWidth=1; // a crack through two blocks
+    g.beginPath(); g.moveTo(20,16); g.lineTo(26,32); g.lineTo(22,48); g.stroke();
+    speckle(50,0.2);
+  } else if(type===3){ // wood: vertical planks, grain lines, knots
+    g.fillStyle=ramp(base,0.35); g.fillRect(0,0,64,64);
     for(let px=0;px<64;px+=8){
       blk(px+1, 0, 6, 64, 0.85+R()*0.3);
       g.fillStyle='rgba(0,0,0,0.25)'; g.fillRect(px+1, 8+R()*40, 6, 1); // grain
       g.fillStyle='rgba(255,255,255,0.08)'; g.fillRect(px+1, 0, 1, 64); // highlight
+      if(R()<0.5){ g.fillStyle='rgba(0,0,0,0.45)'; g.beginPath(); g.ellipse(px+4, 12+R()*40, 2, 3, 0, 0, 6.29); g.fill(); } // a knot
     }
-  } else if(type===4){ // metal: panels with rivets
-    g.fillStyle=shade2(base,0.5); g.fillRect(0,0,64,64);
-    for(let py=0;py<64;py+=32) for(let px=0;px<64;px+=32){
-      blk(px+1, py+1, 30, 30, 0.9+R()*0.2);
-      g.fillStyle='rgba(0,0,0,0.4)';
-      g.fillRect(px+4,py+4,2,2); g.fillRect(px+27,py+4,2,2);
-      g.fillRect(px+4,py+27,2,2); g.fillRect(px+27,py+27,2,2);
-      g.fillStyle='rgba(255,255,255,0.12)'; g.fillRect(px+1,py+1,30,1);
-    }
+  } else if(type===4){ // metal: riveted panels, a horizontal trim band, a vent
+    g.fillStyle=ramp(base,0.5); g.fillRect(0,0,64,64);
+    for(let py=0;py<64;py+=32) for(let px=0;px<64;px+=32) panel(px+1, py+1, 30, 30, 0.9+R()*0.2);
+    g.fillStyle='rgba(0,0,0,0.4)'; g.fillRect(0,30,64,3); // horizontal trim band
+    g.fillStyle='rgba(255,255,255,0.12)'; g.fillRect(0,30,64,1);
+    g.fillStyle='rgba(0,0,0,0.55)'; // a vent grille, bottom right
+    for(let vy=44;vy<58;vy+=4) g.fillRect(40,vy,20,2);
+    speckle(40,0.15);
   } else if(type===5){ // vault: bevelled gold blocks
-    g.fillStyle=shade2(base,0.4); g.fillRect(0,0,64,64);
+    g.fillStyle=ramp(base,0.4); g.fillRect(0,0,64,64);
     for(let row=0;row<4;row++) for(let bx=0;bx<64;bx+=16){
       blk(bx+1, row*16+1, 14, 14, 0.9+R()*0.25);
       g.fillStyle='rgba(255,255,255,0.25)'; g.fillRect(bx+1, row*16+1, 14, 2);
       g.fillStyle='rgba(0,0,0,0.3)'; g.fillRect(bx+1, row*16+13, 14, 2);
     }
   } else if(type===6){ // Wolf3D sliding door: frame, glowing gold portal, barred window, handle
-    g.fillStyle=shade2(base,0.5); g.fillRect(0,0,64,64);
-    g.fillStyle=shade2(base,0.75); g.fillRect(4,4,56,56);
+    g.fillStyle=ramp(base,0.5); g.fillRect(0,0,64,64);
+    g.fillStyle=ramp(base,0.75); g.fillRect(4,4,56,56);
+    rivet(6,6); rivet(56,6); rivet(6,56); rivet(56,56);
     const pg=g.createLinearGradient(10,0,54,0); // lit doorway: gold glow
     pg.addColorStop(0,'#8a6a1a'); pg.addColorStop(0.5,'#ffd75e'); pg.addColorStop(1,'#8a6a1a');
     g.fillStyle=pg; g.fillRect(10,10,44,44);
@@ -285,52 +326,78 @@ function makeWallTex(base, type){
     g.fillStyle='#888'; g.fillRect(26,8,2,10); g.fillRect(34,8,2,10); // bars
     g.fillStyle='#ddd'; g.beginPath(); g.arc(56,36,3,0,6.29); g.fill(); // handle
     g.fillStyle='rgba(0,0,0,0.35)'; g.fillRect(31,4,2,56); // centre seam
-  } else if(type===8){ // gothic arch: columns, glowing teal strips, gold runes
-    g.fillStyle=shade2(base,0.5); g.fillRect(0,0,64,64);
+  } else if(type===8){ // gothic arch: fluted columns, glowing teal strips, gold runes, a pointed arch
+    g.fillStyle=ramp(base,0.5); g.fillRect(0,0,64,64);
     for(let row=0;row<4;row++) for(let bx=0;bx<64;bx+=16) blk(bx+1,row*16+1,14,14,0.8+R()*0.25);
-    g.fillStyle=shade2(base,1.3); g.fillRect(6,0,6,64); g.fillRect(52,0,6,64); // columns
+    g.fillStyle=ramp(base,1.3); g.fillRect(6,0,6,64); g.fillRect(52,0,6,64); // columns
+    g.fillStyle='rgba(0,0,0,0.35)'; g.fillRect(8,0,1,64); g.fillRect(54,0,1,64); // fluting
     glowStrip(14,3,'#3affc8'); glowStrip(47,3,'#3affc8'); // glowing teal inlay
     goldRune(32,22,6); goldRune(32,48,5); // gold runes
     g.fillStyle='rgba(0,0,0,0.5)'; g.beginPath(); g.moveTo(18,64); g.lineTo(18,28); g.lineTo(32,8); g.lineTo(46,28); g.lineTo(46,64); g.fill(); // arch opening
-    g.fillStyle=shade2(base,1.5); g.fillRect(30,6,4,4); // keystone
-  } else if(type===9){ // tech panel: clean plates, glowing trim, vent
-    g.fillStyle=shade2(base,0.45); g.fillRect(0,0,64,64);
+    g.fillStyle=ramp(base,1.5); g.fillRect(30,6,4,4); // keystone
+    g.fillStyle='#ff8844'; g.fillRect(20,58,3,4); g.fillRect(42,58,3,4); // candle glow at the base
+    g.fillStyle='rgba(255,136,68,0.3)'; g.fillRect(18,54,7,8); g.fillRect(40,54,7,8);
+  } else if(type===9){ // tech panel: clean plates, glowing trim, computer screens, vent
+    g.fillStyle=ramp(base,0.45); g.fillRect(0,0,64,64);
     for(let py=0;py<64;py+=32) for(let px=0;px<64;px+=32){
-      blk(px+1, py+1, 30, 30, 0.95+R()*0.15);
+      panel(px+1, py+1, 30, 30, 0.95+R()*0.15);
       g.fillStyle='#66e0ff'; g.fillRect(px+1,py+1,30,1); // glowing trim
-      g.fillStyle='rgba(0,0,0,0.35)'; g.fillRect(px+4,py+4,2,2); g.fillRect(px+27,py+4,2,2);
     }
-    g.fillStyle='rgba(0,0,0,0.5)';
-    for(let vy=40;vy<58;vy+=4) g.fillRect(36,vy,24,2); // vent grille
-  } else if(type===10){ // astral marble: bright, gold veins, soft glow
-    g.fillStyle=shade2(base,1.1); g.fillRect(0,0,64,64);
+    // a computer bank: tiny screens with green/cyan/amber dots
+    g.fillStyle='#0a0a0a'; g.fillRect(4,36,26,20);
+    for(let sy=0;sy<4;sy++) for(let sx=0;sx<5;sx++){
+      g.fillStyle=['#44ff66','#66e0ff','#ffb84a','#44ff66'][((sx+sy)%4)];
+      g.fillRect(6+sx*5, 38+sy*5, 3, 3);
+    }
+    g.fillStyle='rgba(0,0,0,0.5)'; // vent grille
+    for(let vy=40;vy<58;vy+=4) g.fillRect(36,vy,24,2);
+  } else if(type===10){ // astral marble: bright, gold veins, a gold border inlay
+    g.fillStyle=ramp(base,1.1); g.fillRect(0,0,64,64);
     g.fillStyle='rgba(255,215,94,0.28)'; g.fillRect(0,0,64,10); // top gold glow
+    g.strokeStyle='#c8a84a'; g.lineWidth=1; g.strokeRect(3.5,3.5,57,57); // gold border inlay
     goldRune(32,32,7); // gold rune in the marble
     g.strokeStyle='#ffd75e'; g.lineWidth=1.5;
-    g.beginPath(); g.moveTo(0,50); g.lineTo(22,30); g.lineTo(40,44); g.lineTo(64,18); g.stroke(); // gold vein
+    g.beginPath(); g.moveTo(0,50); g.lineTo(22,30); g.lineTo(40,44); g.lineTo(64,18); g.stroke(); // gold veins
     g.beginPath(); g.moveTo(10,64); g.lineTo(30,40); g.lineTo(50,58); g.stroke();
+    g.beginPath(); g.moveTo(64,56); g.lineTo(48,48); g.lineTo(56,36); g.stroke();
     g.fillStyle='rgba(0,0,0,0.15)'; g.fillRect(0,60,64,4);
+    speckle(30,0.08);
   } else if(type===11){ // pillar: dark stone column, glowing teal strips (Eviternity's halls)
-    g.fillStyle=shade2(base,0.35); g.fillRect(0,0,64,64);
+    g.fillStyle=ramp(base,0.35); g.fillRect(0,0,64,64);
     for(let row=0;row<4;row++) for(let bx=0;bx<64;bx+=16) blk(bx+1,row*16+1,14,14,0.7+R()*0.2);
-    g.fillStyle=shade2(base,1.2); g.fillRect(4,0,8,64); g.fillRect(52,0,8,64); // fluted edges
+    g.fillStyle=ramp(base,1.2); g.fillRect(4,0,8,64); g.fillRect(52,0,8,64); // fluted edges
+    g.fillStyle='rgba(0,0,0,0.3)'; g.fillRect(7,0,1,64); g.fillRect(55,0,1,64);
     glowStrip(20,4,'#3affc8'); glowStrip(40,4,'#3affc8'); // twin glowing inlays
     goldRune(32,32,6);
     g.fillStyle='rgba(255,255,255,0.15)'; g.fillRect(0,0,64,3); g.fillRect(0,61,64,3);
+  } else if(type===12){ // hell flesh: dark red-brown, fleshy blobs, bone specks, lava glow in the crevices
+    g.fillStyle=ramp(base,0.5); g.fillRect(0,0,64,64);
+    for(let i=0;i<10;i++){ // fleshy blobs
+      const bx=4+R()*56, by=4+R()*56, br=5+R()*9;
+      g.fillStyle=ramp(base,0.7+R()*0.5);
+      g.beginPath(); g.ellipse(bx,by,br,br*0.7,0,0,6.29); g.fill();
+      g.fillStyle='rgba(0,0,0,0.35)';
+      g.beginPath(); g.ellipse(bx,by+br*0.4,br*0.8,br*0.3,0,0,6.29); g.fill();
+    }
+    for(let i=0;i<14;i++){ g.fillStyle='#e8d8c8'; g.fillRect(4+R()*56, 4+R()*56, 2, 2); } // bone-white specks
+    g.strokeStyle='#ff6a22'; g.lineWidth=1.5; // lava-orange glow in a crevice
+    g.beginPath(); g.moveTo(8,60); g.lineTo(24,44); g.lineTo(40,52); g.lineTo(56,36); g.stroke();
+    g.fillStyle='rgba(255,106,34,0.25)'; g.fillRect(20,42,24,4);
+    speckle(40,0.25);
   } else { // pushwall: carved stone with a statue face
-    g.fillStyle=shade2(base,0.4); g.fillRect(0,0,64,64);
+    g.fillStyle=ramp(base,0.4); g.fillRect(0,0,64,64);
     for(let row=0;row<4;row++) for(let bx=0;bx<64;bx+=16) blk(bx+1,row*16+1,14,14,0.8+R()*0.3);
     g.strokeStyle='rgba(0,0,0,0.55)'; g.lineWidth=3; g.strokeRect(14,10,36,44);
-    g.fillStyle=shade2(base,1.4); g.beginPath(); g.arc(32,30,9,0,6.29); g.fill(); // face
+    g.fillStyle=ramp(base,1.4); g.beginPath(); g.arc(32,30,9,0,6.29); g.fill(); // face
     g.fillStyle='#111'; g.fillRect(27,27,3,3); g.fillRect(34,27,3,3); // eyes
     g.fillRect(29,35,6,2); // mouth
   }
   return c;
 }
-// WALL_TEX[themeIdx][type][shadeLevel] — 4 themes x 11 types x 4 levels
+// WALL_TEX[themeIdx][type][shadeLevel] — 4 themes x 12 types x 4 levels
 const WALL_TEX=THEMES.map(th=>{
   const per={};
-  for(let t=1;t<=11;t++){
+  for(let t=1;t<=12;t++){
     const base=makeWallTex(th.wall[(t-1)%th.wall.length], t);
     const levels=[base];
     for(const a of [0.3,0.55,0.75]){
@@ -405,8 +472,8 @@ const SPRITES={
 const ENEMY_TYPES={
  guard:  {hp:25, dmg:7,  speed:1.1, patrol:0.55, chaseMul:3, range:7, xp:10, score:100, color:'#c8c8c8', spr:'guard',   fire:1.6, reaction:4, name:'KNIGHT'},
  dog:    {hp:1,  dmg:6,  speed:2.3, patrol:1.5,  chaseMul:2, range:1.4, xp:12, score:200, color:'#c09050', spr:'dog',   fire:0.9, reaction:8, melee:true, name:'LION'},
- nightmare:{hp:40, dmg:14, speed:2.6, patrol:1.2, chaseMul:2, range:1.6, xp:25, score:600, color:'#a040a0', spr:'nightmare', fire:0.9, reaction:6, melee:true},
- astral:  {hp:120,dmg:10, speed:0.9, patrol:0.4,  chaseMul:2, range:10, xp:50, score:1000,color:'#ff6060', spr:'astral', fire:2.2, reaction:4, shots:1, hover:0.35},
+ nightmare:{hp:40, dmg:14, speed:2.6, patrol:1.2, chaseMul:2, range:1.6, xp:25, score:600, color:'#1a7a6a', spr:'nightmare', fire:0.9, reaction:6, melee:true},
+ astral:  {hp:120,dmg:10, speed:0.9, patrol:0.4,  chaseMul:2, range:10, xp:50, score:1000,color:'#8a8a8a', spr:'astral', fire:2.2, reaction:4, shots:1, hover:0.35},
  annihilator:{hp:1200,dmg:22,speed:1.2,patrol:0.4, chaseMul:3, range:10, xp:200,score:8000,color:'#c04040', spr:'annihilator', fire:1.6, reaction:1, shots:1, name:'ANNIHILATOR'},
  officer:{hp:50, dmg:12, speed:1.5, patrol:0.55, chaseMul:5, range:8, xp:20, score:400, color:'#c8a84a', spr:'officer', fire:1.3, reaction:2, name:'KNIGHT CAPTAIN'},
  ss:     {hp:100,dmg:14, speed:1.4, patrol:0.55, chaseMul:4, range:8, xp:35, score:500, color:'#2a2a2a', spr:'ss',      fire:1.1, reaction:6, shots:4, name:'DARK KNIGHT'},
@@ -860,7 +927,7 @@ function genLevel(d){
   }
   if(d>1){ const r=pick(rooms.slice(1)); items.push({x:r.cx+0.5,y:r.cy+0.5,kind:'key1'}); }
   log('EPISODE '+theme.ep+' — '+theme.name+' — FLOOR '+d+' — '+rooms.length+' rooms, '+enemies.length+' hostiles, '+doors.length+' doors. Seed '+(runSeed+d*7919));
-  if(audioUnlocked) startMusic(d%3===0?'boss':theme.ep===4?'astral':'combat'); // boss floors get the fast track, Astral episode gets the astral track
+  if(audioUnlocked) startMusic(d%3===0?'boss':theme.ep===4?'astral':'combat') // ep 4 is Celestial (the heavenly episode); // boss floors get the fast track, Astral episode gets the astral track
 }
 function offerChoices(n){
   levelChoices=shuffle(UPGRADES.slice()).slice(0,n); choiceSel=0;
@@ -1270,35 +1337,41 @@ function drawEnemySprite(type){
     return c;
   }
   if(type==='nightmare'){
-    // Eviternity's Nightmare Demon: a shadowy, hunched demon — mostly
-    // darkness, glowing purple eyes (it flickers in and out of sight
-    // in the renderer, like the Spectre it is)
-    const gr=g.createLinearGradient(24,0,72,0); gr.addColorStop(0,'#2a0a2a'); gr.addColorStop(1,'#0a020a');
+    // Eviternity's Nightmare Demon: a dark teal Demon/Pinky, 2x the HP,
+    // ~50% faster, with a tail. Mostly darkness, glowing teal eyes
+    // (it flickers in and out of sight in the renderer, like the
+    // Spectre it is) — the teal-on-black silhouette is the single most
+    // recognisable Eviternity enemy.
+    const gr=g.createLinearGradient(24,0,72,0); gr.addColorStop(0,'#0a3a32'); gr.addColorStop(1,'#02120e');
     g.fillStyle=gr; g.fillRect(28,56,40,38); // hunched torso
-    OR(30,94,12,30,'#120412'); OR(54,94,12,30,'#120412'); // legs
-    OR(20,58,10,36,'#120412'); OR(66,58,10,36,'#120412'); // arms
+    OR(30,94,12,30,'#04120e'); OR(54,94,12,30,'#04120e'); // legs
+    OR(20,58,10,36,'#04120e'); OR(66,58,10,36,'#04120e'); // arms
     g.fillStyle='#c8c8c8'; g.fillRect(20,92,2,8); g.fillRect(24,92,2,8); g.fillRect(74,92,2,8); g.fillRect(78,92,2,8); // claws
-    C(48,42,15,'#1a051a'); // dark skull
-    C(41,40,3,'#c040ff'); C(55,40,3,'#c040ff'); // glowing eyes
-    R(44,50,8,2,'#c040ff'); // glowing mouth slit
-    g.fillStyle='#2a0a2a'; g.beginPath(); g.moveTo(36,32); g.lineTo(32,16); g.lineTo(42,28); g.fill();
+    C(48,42,15,'#051a14'); // dark skull
+    C(41,40,3,'#3affc8'); C(55,40,3,'#3affc8'); // glowing teal eyes
+    R(44,50,8,2,'#3affc8'); // glowing mouth slit
+    g.fillStyle='#0a3a32'; g.beginPath(); g.moveTo(36,32); g.lineTo(32,16); g.lineTo(42,28); g.fill();
     g.beginPath(); g.moveTo(60,32); g.lineTo(64,16); g.lineTo(54,28); g.fill(); // horns
+    g.strokeStyle='#0a3a32'; g.lineWidth=4; g.beginPath(); g.moveTo(28,90); g.quadraticCurveTo(8,100,14,118); g.stroke(); // the tail
     return c;
   }
   if(type==='astral'){
-    // Eviternity's Astral Cacodemon: a floating red sphere, one eye,
-    // a huge toothed mouth, little horns (it floats — hover in render)
-    const gr=g.createRadialGradient(40,58,6,48,72,36); gr.addColorStop(0,'#ff7070'); gr.addColorStop(1,'#a02020');
+    // Eviternity's Astral Cacodemon: a floating GREY sphere, one eye,
+    // a huge toothed mouth, little horns (it floats — hover in render).
+    // Grey, not red — the red one is the vanilla Cacodemon.
+    const gr=g.createRadialGradient(40,58,6,48,72,36); gr.addColorStop(0,'#a8a8a8'); gr.addColorStop(1,'#4a4a4a');
     g.fillStyle=gr; g.beginPath(); g.arc(48,72,34,0,6.29); g.fill(); // body
     g.strokeStyle='#0a0a0a'; g.lineWidth=2; g.beginPath(); g.arc(48,72,34,0,6.29); g.stroke(); // outline
     g.fillStyle='#d8d8d8'; g.beginPath(); g.moveTo(28,50); g.lineTo(24,30); g.lineTo(36,46); g.fill();
     g.beginPath(); g.moveTo(68,50); g.lineTo(72,30); g.lineTo(60,46); g.fill(); // horns
     C(48,54,7,'#ffffff'); C(48,54,3,'#ff0000'); C(48,54,1.5,'#000000'); // one eye
-    g.fillStyle='#1a0505'; g.beginPath(); g.ellipse(48,86,16,10,0,0,6.29); g.fill(); // huge mouth
+    g.fillStyle='#1a1a1a'; g.beginPath(); g.ellipse(48,86,16,10,0,0,6.29); g.fill(); // huge mouth
     g.fillStyle='#ffffff';
     for(let tx=36;tx<=60;tx+=6) g.fillRect(tx,78,3,4); // top teeth
     for(let tx=36;tx<=60;tx+=6) g.fillRect(tx,92,3,4); // bottom teeth
-    g.fillStyle='#a02020'; g.fillRect(12,72,8,14); g.fillRect(76,72,8,14); // little arms
+    g.fillStyle='#5a5a5a'; g.fillRect(12,72,8,14); g.fillRect(76,72,8,14); // little arms
+    // cybernetic trim: a teal ring around the body (Eviternity II's cyber-astral look)
+    g.strokeStyle='#3affc8'; g.lineWidth=1.5; g.beginPath(); g.arc(48,72,28,0.6,2.5); g.stroke();
     return c;
   }
   if(type==='annihilator'){
@@ -1311,7 +1384,11 @@ function drawEnemySprite(type){
     g.fillStyle=gr; g.fillRect(20,44,56,40); // bulky torso
     OR(20,44,14,5,'#c8a84a'); OR(62,44,14,5,'#c8a84a'); // gold shoulder boards
     OR(24,78,48,6,'#0a0a0a'); R(44,78,8,6,'#8a7a4a'); // belt + buckle
-    OR(12,46,10,38,'#2a0a0a'); OR(74,46,10,38,'#2a0a0a'); // arms
+    OR(12,46,10,38,'#2a0a0a'); // left arm
+    // right arm is cybernetic: a metal rocket launcher + a chaingun barrel
+    OR(74,46,12,38,'#3a3a3a'); R(76,46,8,4,'#8a8a8a'); // metal arm
+    C(80,84,6,'#2a2a2a'); C(80,84,3,'#ff8844'); // the rocket tube
+    R(70,60,4,20,'#1a1a1a'); C(72,58,3,'#8a8a8a'); // the chaingun barrel
     C(79,84,7,'#44ff44'); C(79,84,3,'#aaffaa'); // a green fireball in its hand
     OR(34,16,28,28,'#5a1a1a'); // head
     R(52,16,10,28,'rgba(0,0,0,0.3)');
@@ -1324,6 +1401,10 @@ function drawEnemySprite(type){
   // --- knight: plate armour, a great helm, a crossbow ---
   // (all human enemies are knights now; the crossbow is the ranged
   // weapon — mechanically the same hitscan as the old rifle)
+  // Doom sprite rules: one dominant hue, a hard dark outline around the
+  // whole silhouette, heavy shadow on the right side, a bright top
+  // highlight — chunky and readable at a distance, not clean line art.
+  g.fillStyle='#0a0a0a'; g.fillRect(14,14,68,116); // the silhouette shadow (the dark outline)
   OR(30,112,13,16,'#0e0e0e'); OR(53,112,13,16,'#0e0e0e'); // sabatons
   OR(31,82,11,32,P.uniD); OR(54,82,11,32,P.uniD); // greaves
   // breastplate (steel, left-lit, dark outline) with a centre ridge
@@ -1331,6 +1412,8 @@ function drawEnemySprite(type){
   g.fillStyle='#0a0a0a'; g.fillRect(23,43,50,41);
   g.fillStyle=gr; g.fillRect(24,44,48,39);
   R(46,44,4,39,shade2(P.uni,1.3)); // centre ridge
+  R(24,44,48,2,'rgba(255,255,255,0.28)'); // hard top highlight on the plate
+  R(68,44,4,39,'rgba(0,0,0,0.4)'); // heavy shadow on the right side
   OR(24,44,12,4,shade2(P.uni,1.25)); OR(60,44,12,4,shade2(P.uni,1.25)); // pauldrons
   OR(24,79,48,5,'#0e0e0e'); R(44,79,8,5,'#8a7a4a'); // belt + buckle
   R(58,76,4,14,'#c8c8c8'); R(54,74,12,3,'#8a7a4a'); // a sword at the hip: blade + crossguard
@@ -1377,43 +1460,61 @@ function drawGunSprite(key){
     R(146,90,12,26,'#d8a878'); return c;
   }
   if(key==='2'){ // pistol
-    R(96,40,48,28,steel); R(110,18,20,24,dark); R(100,68,40,58,dark); R(100,68,10,58,'rgba(0,0,0,0.3)');
+    R(96,40,48,28,steel); R(96,40,48,2,'rgba(255,255,255,0.4)'); R(96,64,48,4,'rgba(0,0,0,0.5)');
+    R(110,18,20,24,dark); R(100,68,40,58,dark); R(100,68,10,58,'rgba(0,0,0,0.3)');
     R(112,96,16,10,'#111111'); return c;
   }
   if(key==='3'){ // shotgun
-    R(106,8,28,84,steel); R(100,92,40,18,wood); R(96,110,48,50,wood); R(96,110,12,50,'rgba(0,0,0,0.3)');
+    R(106,8,28,84,steel); R(106,8,28,2,'rgba(255,255,255,0.4)'); R(106,88,28,4,'rgba(0,0,0,0.5)');
+    R(100,92,40,18,wood); R(96,110,48,50,wood); R(96,110,12,50,'rgba(0,0,0,0.3)');
     R(112,60,16,10,'#111111'); return c;
   }
   if(key==='4'){ // super shotgun — double barrel
-    R(100,8,18,84,steel); R(122,8,18,84,dark); R(98,92,44,18,wood); R(94,110,52,50,wood);
+    R(100,8,18,84,steel); R(122,8,18,84,dark); R(100,8,40,2,'rgba(255,255,255,0.4)'); R(100,88,40,4,'rgba(0,0,0,0.5)');
+    R(98,92,44,18,wood); R(94,110,52,50,wood);
     R(94,110,12,50,'rgba(0,0,0,0.3)'); return c;
   }
   if(key==='5'){ // chaingun — barrel cluster
     C(108,30,9,steel); C(132,30,9,steel); C(120,44,9,dark);
-    R(96,54,48,40,steel); R(100,94,40,56,dark); R(100,94,10,56,'rgba(0,0,0,0.3)'); return c;
+    R(96,54,48,40,steel); R(96,54,48,2,'rgba(255,255,255,0.4)'); R(96,90,48,4,'rgba(0,0,0,0.5)');
+    R(100,94,40,56,dark); R(100,94,10,56,'rgba(0,0,0,0.3)'); return c;
   }
   if(key==='6'){ // rocket launcher — big tube
-    R(84,30,72,66,'#4a5a3a'); R(84,30,72,10,'#6a7a4a'); R(96,14,48,16,dark);
+    R(84,30,72,66,'#4a5a3a'); R(84,30,72,2,'rgba(255,255,255,0.4)'); R(84,92,72,4,'rgba(0,0,0,0.5)');
+    R(84,30,72,10,'#6a7a4a'); R(96,14,48,16,dark);
     R(100,96,40,50,dark); C(120,63,14,'#222222'); C(120,63,8,'#ff8844'); return c;
   }
   if(key==='7'){ // plasma gun — glowing coils
-    R(96,40,48,80,'#3a4a5a'); R(104,16,32,26,steel);
+    R(96,40,48,80,'#3a4a5a'); R(96,40,48,2,'rgba(255,255,255,0.4)'); R(96,116,48,4,'rgba(0,0,0,0.5)');
+    R(104,16,32,26,steel);
     C(120,28,7,'#66ccff'); C(120,52,7,'#66ccff'); C(120,76,7,'#66ccff');
     R(100,120,40,44,dark); return c;
   }
   // BFG9000 — big body, green glowing core
-  R(84,40,72,90,'#2a3a2a'); R(100,10,40,32,steel);
+  R(84,40,72,90,'#2a3a2a'); R(84,40,72,2,'rgba(255,255,255,0.4)'); R(84,126,72,4,'rgba(0,0,0,0.5)');
+  R(100,10,40,32,steel);
   C(120,85,18,'#44ff66'); C(120,85,9,'#aaffaa');
   R(100,130,40,36,dark); return c;
 }
 function rasterizeArt(art, color){
   // Pixel-art icon from the ASCII sprite rows (items only now).
+  // Doom pickups are colour-coded and bright, with a dark outline so
+  // they pop at distance: draw the icon in near-black offset 1px in
+  // every direction first, then the bright colour on top.
   const rows=art.length, cols=Math.max(...art.map(r=>r.length));
   const cell=8, c=mkCanvas(cols*cell, rows*cell), g=c.getContext('2d');
   const bright={'#':1,'=':1,'o':0.9,'O':0.9,'◉':1,'x':0.8,'✕':0.9};
+  const filled=[];
   for(let y=0;y<rows;y++) for(let x=0;x<art[y].length;x++){
     const ch=art[y][x]; if(ch===' ') continue;
-    g.globalAlpha=bright[ch]||0.75; g.fillStyle=color;
+    filled.push([x,y,bright[ch]||0.75]);
+  }
+  for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]){
+    g.fillStyle='#0a0a0a'; g.globalAlpha=0.9;
+    for(const [x,y] of filled) g.fillRect((x*cell)+dx, (y*cell)+dy, cell, cell);
+  }
+  for(const [x,y,a] of filled){
+    g.globalAlpha=a; g.fillStyle=color;
     g.fillRect(x*cell, y*cell, cell, cell);
   }
   g.globalAlpha=1; return c;
@@ -1431,7 +1532,7 @@ const ENEMY_SPR={};
 for(const t of ['guard','officer','ss','dog','mutant','boss','nightmare','astral','annihilator']) ENEMY_SPR[t]=shadeLevels(drawEnemySprite(t));
 const GUN_SPR={};
 for(const w of WEAPONS) GUN_SPR[w.key]=drawGunSprite(w.key);
-const ITEM_COLOR={health:'#ff5555',ammo:'#ffd75e',gold:'#ffd75e',bomb:'#ff8844',exit:'#7ee081',key:'#ffd75e',cross:'#ffffff',chalice:'#ffd75e',bible:'#e8e8e8',crown:'#ffd75e',firstaid:'#ffffff',food:'#d8a878',clip:'#ffd75e',shells:'#ff8844',rockets:'#ff5555',cells:'#7ec8ff',key1:'#ffd75e'};
+const ITEM_COLOR={health:'#5a8aff',ammo:'#ffd75e',gold:'#ffd75e',bomb:'#ff8844',exit:'#7ee081',key:'#ffd75e',cross:'#ffffff',chalice:'#ffd75e',bible:'#e8e8e8',crown:'#ffd75e',firstaid:'#ffffff',food:'#d8a878',clip:'#ffd75e',shells:'#ff5555',rockets:'#ff8844',cells:'#7ec8ff',key1:'#ffd75e'};
 const ITEM_SPR={};
 for(const k of Object.keys(SPRITES)){ if(ITEM_COLOR[k]) ITEM_SPR[k]=shadeLevels(rasterizeArt(SPRITES[k], ITEM_COLOR[k])); }
 // --- gamepad (Gamepad API, standard mapping) ---
