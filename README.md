@@ -1,6 +1,6 @@
 # QWERTYSTEIN
 
-A Wolfenstein-style raycaster running entirely in the browser. No build step, no libraries — one `index.html` (plus a Google Fonts link for the HUD typeface). Walls are rendered the ojread/ascii-fps way: one ASCII character per ray column, stretched to the wall's full height at its regular width, so wall tops and bottoms are pixel-smooth. Enemies and guns are drawn sprites, Doom-style.
+A Wolfenstein-style raycaster running entirely in the browser. No build step, no libraries — one `index.html` (plus a Google Fonts link for the HUD typeface). Walls are Doom-style 64×64 texture slices, enemies are drawn sprites, and the floors have Doom-style sector heights (raised platforms, a boss dais).
 
 Play it live: https://bthompson91.github.io/qwertystein/
 
@@ -8,11 +8,13 @@ Play it live: https://bthompson91.github.io/qwertystein/
 
 Open `index.html` in a browser, click, press Enter. Or play live at https://bthompson91.github.io/qwertystein/
 
-- **WASD** move, **mouse** look (click to lock), **← →** turn, **mouse Y / ↑ ↓** look up/down, **J** jump
-- **Click / Space** shoot
+- **WASD** move, **mouse** look (click to lock), **← →** turn, **mouse Y / ↑ ↓** look up/down, **Space / J** jump
+- **Click / Ctrl** shoot (Ctrl is the keyboard trigger; click is the mouse trigger)
 - **1–8** weapons: Fist, Pistol, Shotgun, Super Shotgun, Chaingun, Rocket Launcher, Plasma Gun, BFG9000
 - **F** meat hook (Super Shotgun), **Shift** run, **Q** dash, **T** throw a bomb
 - **E** use (doors, pushwalls, elevator) / glory kill, **P** pause, **M** mute, **N** new run (on death)
+
+> **Ctrl+W warning:** Chrome reserves Ctrl+W to close the tab and a page can't stop it — so don't hold Ctrl to shoot while pressing W to move forward, or the tab closes. Shoot with the mouse click while moving, or use Ctrl only when you're not pressing W.
 
 ### Phone
 
@@ -41,7 +43,7 @@ Every floor is generated from the run seed: 8–10 rooms connected by corridors,
 
 ## Tech
 
-Raycasting (DDA, one ray per character column, fisheye-corrected) drawn straight to a canvas. Walls use the ojread/ascii-fps trick — one ASCII character per column, pre-rendered to a small tile and stretched to the wall's full height, coloured from the floor theme's palette and distance-shaded. Floor and ceiling are flat-shaded bands. Enemies are drawn 3D-style billboard sprites (shaded figures that always face you, clipped per column against the wall depth buffer, with HP bars and a "!" when staggered); guns are Doom-style drawn viewmodel sprites with a muzzle flash. The scene is rendered to an offscreen canvas larger than the view (overscan) and view-bob just pans the window inside it, so bobbing never exposes a black border. The HUD is drawn in Bungee Tint. The minimap is a rotating radar (player facing is up) with fog of war, top-left, half the old size.
+Raycasting (DDA, one ray per character column, fisheye-corrected) drawn straight to a canvas. Walls are Doom-style 64×64 texture slices — brick, stone, wood, metal, vault, door, pushwall — one 1px-wide slice per ray column, pre-baked in 4 distance-shade levels and drawn nearest-neighbour so they stay crunchy. (The earlier ojread/ascii-fps stretched-character walls shimmered: the dithered glyphs moiré'd as they scaled and fractional column widths left seams, so they were replaced with real textures.) Floors have Doom sector heights: 1–2 raised platforms per floor (a 0.5 step you walk straight up) in tall rooms, and a dais under the boss on every 3rd floor — your eye rides the floor you're standing on, walls take their base and ceiling from the room you're in, and the floor is redrawn in strips where the height changes so the step faces read as dark risers. Enemies are drawn 3D-style billboard sprites (muted colours, hard dark outline, slit eyes under heavy brows, rifle aimed at you), clipped per column against the wall depth buffer, with HP bars and a "!" when staggered; guns are Doom-style drawn viewmodel sprites with a muzzle flash. The scene is rendered to an offscreen canvas larger than the view (overscan) and view-bob just pans the window inside it, so bobbing never exposes a black border. The HUD is drawn in Bungee Tint. The minimap is a rotating radar (player facing is up) with fog of war, top-left, half the old size.
 
 ## Wolfenstein 3D logic
 
@@ -80,24 +82,29 @@ momentum impulse, not a speed multiplier. Player radius stays Wolf3D's
 
 Mouse Y, ArrowUp/ArrowDown, the touch LOOK pad and the gamepad right
 stick pitch the view up and down (about 23 degrees each way) by
-moving the horizon; **J** jumps with simple gravity (about 0.4 tiles
-high), which shifts the walls and floor through the eye height. The
-renderer is a full 2.5D raycaster, so pitch and jump are
-horizon/eye-height effects, not a new map axis — there are no stairs
-or multi-storey floors.
+moving the horizon; **Space / J** jumps with simple gravity (about
+0.4 tiles high), which shifts the walls and floor through the eye
+height. And the floors themselves have height, Doom-style: each floor
+has 1–2 raised platforms (a 0.5 step you walk straight up, no jumping
+needed) in tall rooms with 1.5 ceilings, and a dais under the boss on
+every 3rd floor. Your eye rides the floor you're standing on, walls
+take their base and ceiling from the room you're in, and the step
+faces are drawn as dark risers. There are no stairs or multi-storey
+floors — it's Doom's sector heights, not a second storey.
 
 ## Unicode + ASCII art
 
-Walls are one ASCII character per column (▓ brick, █ stone, ▒ wood,
-█ metal, ▓ vault, █ door, ▒ pushwall), stretched to the wall's full
-height and coloured from the floor theme's palette with distance
-shading — the ojread/ascii-fps trick, so wall edges are pixel-smooth
-instead of stepping in character rows. Enemies and guns are drawn
-sprites, not ASCII: shaded 3D-style figures for guard, officer, SS,
-dog, mutant and Hans Grosse, and Doom-style viewmodels for all eight
-weapons. Items (first aid, food, clip, shells, rockets, cells, cross,
-chalice, bible, crown, gold key, bomb, elevator exit) are pixel-art
-icons rasterised from the old ASCII sprites.
+Walls are 64×64 textures (brick courses, stone blocks, wood planks,
+metal panels with rivets, bevelled vault blocks, a sliding door with a
+barred window, a pushwall with a carved statue face), tinted from the
+floor theme's palette, drawn one 1px-wide slice per ray column and
+nearest-neighbour so they stay crunchy. Enemies and guns are drawn
+sprites, not ASCII: muted, dark-outlined figures for guard, officer,
+SS, dog (in profile, teeth showing), mutant and Hans Grosse — slit
+eyes under heavy brows, a rifle aimed at the viewer — and Doom-style
+viewmodels for all eight weapons. Items (first aid, food, clip,
+shells, rockets, cells, cross, chalice, bible, crown, gold key, bomb,
+elevator exit) are pixel-art icons rasterised from the old ASCII sprites.
 
 ## Doom Eternal glory kills
 

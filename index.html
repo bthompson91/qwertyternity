@@ -49,9 +49,9 @@
   <button data-act="weapon">WEAPON</button><button data-act="hook">HOOK</button><button data-act="pause">PAUSE</button>
 </div>
 <div id="padstat"></div>
-<pre id="keys"><b>WASD</b> move &nbsp; <b>Mouse</b> look (click to lock) &nbsp; <b>← →</b> turn &nbsp; <b>Mouse Y / ↑ ↓</b> look up/down &nbsp; <b>J</b> jump &nbsp; <b>Click / Space</b> shoot
+<pre id="keys"><b>WASD</b> move &nbsp; <b>Mouse</b> look (click to lock) &nbsp; <b>← →</b> turn &nbsp; <b>Space / J</b> jump &nbsp; <b>Click / Ctrl</b> shoot
 <b>1-8</b> weapons: 1 Fist  2 Pistol  3 Shotgun  4 Super Shotgun  5 Chaingun  6 Rocket Launcher  7 Plasma Gun  8 BFG9000 &nbsp; <b>F</b> meat hook (Super Shotgun) &nbsp; <b>Shift</b> run
-<b>Q</b> dash &nbsp; <b>J</b> jump &nbsp; <b>T</b> throw bomb &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>N</b> new run (on death) &nbsp; <b>E</b> use (door / pushwall / elevator) / <b>glory kill</b> a staggered enemy
+<b>Q</b> dash &nbsp; <b>T</b> throw bomb &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>N</b> new run (on death) &nbsp; <b>E</b> use (door / pushwall / elevator) / <b>glory kill</b> a staggered enemy
 <b>QWERTY tip:</b> strafe with <b>Q/E</b>? No — Q is dash, E is nothing. Strafe is A/D while turning with the mouse. That's the QWERTYSTEIN way.
 Find the glowing <b>[EXIT]</b> portal on each floor. Kills give XP. Level up: press <b>1 / 2 / 3</b> to pick an upgrade.
 <b>Phone:</b> left pad = move stick, right pad = drag to look (tap it to fire), FIRE / DASH / BOMB / JUMP buttons below. Also works by touch on the game itself: left half drag = move, right half drag = look, tap right = fire.
@@ -148,6 +148,7 @@ function resizeCanvas(){
   CHAR_W=cv.width/180;
   OX=Math.round(CHAR_W*8); OY=Math.round(cv.height*0.08);
   scene.width=Math.round(VW+2*OX); scene.height=Math.round(VH+2*OY);
+  sctx.imageSmoothingEnabled=false; // nearest-neighbour: crunchy pixels (canvas resize resets it)
   nCols=Math.floor(scene.width/CHAR_W);
   zbuf=new Float32Array(nCols+2);
   ctx.font='bold '+Math.max(6,Math.floor(cv.height/75))+'px ui-monospace, Menlo, Consolas, monospace';
@@ -182,27 +183,81 @@ const THEMES=[
 // drawImage-stretched to (CHAR_W x wall height), so wall tops and
 // bottoms are pixel-smooth instead of stepping in 8px character rows.
 // Color is distance-shaded; side faces are darker.
-const WALL_GLYPH={
- 1:{ch:'▓'}, // brick
- 2:{ch:'█'}, // stone
- 3:{ch:'▒'}, // wood planks
- 4:{ch:'█'}, // metal
- 5:{ch:'▓'}, // vault — gold blocks
- 6:{ch:'█'}, // Wolf3D sliding door
- 7:{ch:'▒'}, // pushwall — a statue that slides
-}; // colour comes from the floor theme's wall palette
-const glyphCache=new Map(); // "ch|color" -> CHAR_W x 10 tile canvas
-function glyphTile(ch, color){
-  const key=ch+'|'+color;
-  let t=glyphCache.get(key);
-  if(t) return t;
-  t=document.createElement('canvas'); t.width=CHAR_W; t.height=10;
-  const g=t.getContext('2d');
-  g.font='10px monospace'; g.textBaseline='top'; g.fillStyle=color;
-  g.fillText(ch, 0, 0);
-  glyphCache.set(key, t);
-  return t;
+// --- Doom-style wall textures ---
+// The ojread stretched-character walls shimmered badly: the dithered
+// glyphs moire as they scale, and fractional column widths left 1px
+// seams. Real 64x64 texture slices (Wolf3D/Doom) don't. Each wall type
+// gets a texture per floor theme (the theme's wall palette tints it)
+// in 4 pre-baked distance-shade levels, so a column is one drawImage.
+function makeWallTex(base, type){
+  const c=mkCanvas(64,64), g=c.getContext('2d');
+  const R=mulberry32(type*7919+13); // stable per-type variation
+  const blk=(x,y,w,h,f)=>{ g.fillStyle=shade2(base,f); g.fillRect(x,y,w,h); };
+  if(type===1){ // brick: 4 courses of 16px bricks, offset rows
+    g.fillStyle=shade2(base,0.45); g.fillRect(0,0,64,64); // mortar
+    for(let row=0;row<4;row++){ const off=(row%2)*8;
+      for(let bx=-8;bx<64;bx+=16) blk(bx+off+1, row*16+1, 14, 14, 0.85+R()*0.3); }
+  } else if(type===2){ // stone: big 32x16 blocks
+    g.fillStyle=shade2(base,0.4); g.fillRect(0,0,64,64);
+    for(let row=0;row<4;row++){ const off=(row%2)*16;
+      for(let bx=-16;bx<64;bx+=32){ blk(bx+off+1, row*16+1, 30, 14, 0.8+R()*0.35);
+        g.fillStyle='rgba(0,0,0,0.18)'; g.fillRect(bx+off+1, row*16+13, 30, 2); } }
+  } else if(type===3){ // wood: vertical planks
+    g.fillStyle=shade2(base,0.35); g.fillRect(0,0,64,64);
+    for(let px=0;px<64;px+=8){
+      blk(px+1, 0, 6, 64, 0.85+R()*0.3);
+      g.fillStyle='rgba(0,0,0,0.25)'; g.fillRect(px+1, 8+R()*40, 6, 1); // grain
+      g.fillStyle='rgba(255,255,255,0.08)'; g.fillRect(px+1, 0, 1, 64); // highlight
+    }
+  } else if(type===4){ // metal: panels with rivets
+    g.fillStyle=shade2(base,0.5); g.fillRect(0,0,64,64);
+    for(let py=0;py<64;py+=32) for(let px=0;px<64;px+=32){
+      blk(px+1, py+1, 30, 30, 0.9+R()*0.2);
+      g.fillStyle='rgba(0,0,0,0.4)';
+      g.fillRect(px+4,py+4,2,2); g.fillRect(px+27,py+4,2,2);
+      g.fillRect(px+4,py+27,2,2); g.fillRect(px+27,py+27,2,2);
+      g.fillStyle='rgba(255,255,255,0.12)'; g.fillRect(px+1,py+1,30,1);
+    }
+  } else if(type===5){ // vault: bevelled gold blocks
+    g.fillStyle=shade2(base,0.4); g.fillRect(0,0,64,64);
+    for(let row=0;row<4;row++) for(let bx=0;bx<64;bx+=16){
+      blk(bx+1, row*16+1, 14, 14, 0.9+R()*0.25);
+      g.fillStyle='rgba(255,255,255,0.25)'; g.fillRect(bx+1, row*16+1, 14, 2);
+      g.fillStyle='rgba(0,0,0,0.3)'; g.fillRect(bx+1, row*16+13, 14, 2);
+    }
+  } else if(type===6){ // Wolf3D sliding door: frame, panels, barred window, handle
+    g.fillStyle=shade2(base,0.5); g.fillRect(0,0,64,64);
+    g.fillStyle=shade2(base,0.75); g.fillRect(4,4,56,56);
+    g.fillStyle=shade2(base,0.55); g.fillRect(10,10,20,44); g.fillRect(34,10,20,44);
+    g.fillStyle='#111'; g.fillRect(22,8,20,10); // window
+    g.fillStyle='#888'; g.fillRect(26,8,2,10); g.fillRect(34,8,2,10); // bars
+    g.fillStyle='#ddd'; g.beginPath(); g.arc(56,36,3,0,6.29); g.fill(); // handle
+    g.fillStyle='rgba(0,0,0,0.35)'; g.fillRect(31,4,2,56); // centre seam
+  } else { // pushwall: carved stone with a statue face
+    g.fillStyle=shade2(base,0.4); g.fillRect(0,0,64,64);
+    for(let row=0;row<4;row++) for(let bx=0;bx<64;bx+=16) blk(bx+1,row*16+1,14,14,0.8+R()*0.3);
+    g.strokeStyle='rgba(0,0,0,0.55)'; g.lineWidth=3; g.strokeRect(14,10,36,44);
+    g.fillStyle=shade2(base,1.4); g.beginPath(); g.arc(32,30,9,0,6.29); g.fill(); // face
+    g.fillStyle='#111'; g.fillRect(27,27,3,3); g.fillRect(34,27,3,3); // eyes
+    g.fillRect(29,35,6,2); // mouth
+  }
+  return c;
 }
+// WALL_TEX[themeIdx][type][shadeLevel] — 4 themes x 7 types x 4 levels
+const WALL_TEX=THEMES.map(th=>{
+  const per={};
+  for(let t=1;t<=7;t++){
+    const base=makeWallTex(th.wall[(t-1)%th.wall.length], t);
+    const levels=[base];
+    for(const a of [0.3,0.55,0.75]){
+      const c=mkCanvas(64,64), g=c.getContext('2d');
+      g.drawImage(base,0,0); g.fillStyle='rgba(0,0,0,'+a+')'; g.fillRect(0,0,64,64);
+      levels.push(c);
+    }
+    per[t]=levels;
+  }
+  return per;
+});
 const SHADE=['#ffffff','#e8e8e8','#c8c8c8','#a0a0a0','#787878','#585858','#383838','#222222'];
 function shadeColor(hex, dist){
   // darken a hex colour by distance; returns rgb string
@@ -498,17 +553,21 @@ function chooseUpgrade(i){
 }
 let zbuf=new Float32Array(256);
 let seen=new Uint8Array(64*64); // fog of war: tiles seen this floor (1 = seen)
+let floorH=new Float32Array(64*64), ceilH=new Float32Array(64*64); // Doom sector heights: floor/ceiling height per cell (0/1 = ground)
+let themeIdx=0; // index into THEMES for this floor (for WALL_TEX)
 function log(m){ logs.unshift(m); logs=logs.slice(0,4); }
 function newRun(){
   runSeed=(Math.random()*1e9)|0;
-  depth=1; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,ammo:{bullets:50,shells:16,rockets:10,cells:80},kills:0,score:0,gold:0,dead:false,keys:0,extraLives:0,nextExtra:40000, momx:0, momy:0, invulnT:0, gloryKills:0,pitch:0,z:0,vz:0};
+  depth=1; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,ammo:{bullets:50,shells:16,rockets:10,cells:80},kills:0,score:0,gold:0,dead:false,keys:0,extraLives:0,nextExtra:40000, momx:0, momy:0, invulnT:0, gloryKills:0,pitch:0,z:0,vz:0,floorH:0};
   for(const w of WEAPONS){ w.ammo = w.key==='1'?Infinity : w.key==='2'?Infinity : w.key==='3'?120 : w.key==='4'?40 : 200; }
   player.ammo={bullets:50,shells:16,rockets:10,cells:80};
   genLevel(1);
+  keys['Space']=false;
   state='play'; log('RUN #'+runSeed+' — floor 1, '+theme.name);
 }
 function genLevel(d){
   depth=d; theme=THEMES[(d-1)%THEMES.length]; seen.fill(0);
+  floorH.fill(0); ceilH.fill(1); themeIdx=(d-1)%THEMES.length;
   rng=mulberry32(runSeed + d*7919);
   // Wolf3D: MAPSIZE 64 — maps are forced 64x64 (WL_GAME.C SetupGameLevel)
   mapW=WOLF.MAPSIZE; mapH=WOLF.MAPSIZE;
@@ -587,6 +646,32 @@ function genLevel(d){
   for(const r of rooms){ const dd=(r.cx-player.x)**2+(r.cy-player.y)**2; if(dd>fd){fd=dd;far=r;} }
   // ELEVATORTILE 21 sits here (floor stays walkable; exit item marks it)
   items.push({x:far.cx+0.5,y:far.cy+0.5,kind:'exit'});
+  // --- Doom-style raised floors: platforms + a boss dais ---
+  // A platform is a 0.5-high step you walk straight up; its ceiling
+  // rises to 1.5 so standing on it doesn't put your eyes at the ceiling.
+  // The whole room's ceiling rises too (a tall room), so the walls
+  // around a platform read at their proper height.
+  function raiseRect(x,y,w,h){
+    for(let yy=y;yy<y+h;yy++) for(let xx=x;xx<x+w;xx++){
+      if(xx<1||yy<1||xx>=mapW-1||yy>=mapH-1) continue;
+      if(grid[yy][xx]!==0) continue; // open floor only
+      floorH[yy*64+xx]=0.5; ceilH[yy*64+xx]=1.5;
+    }
+  }
+  function raiseRoomCeil(r){
+    for(let yy=r.y;yy<r.y+r.h;yy++) for(let xx=r.x;xx<r.x+r.w;xx++)
+      if(grid[yy][xx]===0) ceilH[yy*64+xx]=1.5;
+  }
+  // 1-2 platforms in rooms that aren't the spawn or the exit room
+  const platRooms=shuffle(rooms.filter(r=>r!==rooms[0]&&r!==far)).slice(0, d%3===0?1:2);
+  for(const r of platRooms){
+    raiseRoomCeil(r);
+    const pw=ri(2,Math.max(2,r.w-2)), ph=ri(2,Math.max(2,r.h-2));
+    const px=r.x+ri(1,Math.max(1,r.w-pw-1)), py=r.y+ri(1,Math.max(1,r.h-ph-1));
+    raiseRect(px,py,pw,ph);
+  }
+  // boss floor: a dais just below the exit, where Hans stands
+  if(d%3===0){ raiseRoomCeil(far); raiseRect(far.cx-1, far.cy+1, 3, 2); }
   enemies=[];
   const nE=Math.min(10+d*3, 40);
   const types = d===1?['guard','dog'] : d===2?['guard','dog','officer'] : d%3===0?['guard','officer','ss','mutant','dog'] : ['guard','dog','officer','ss','mutant'];
@@ -631,30 +716,42 @@ function los(x0,y0,x1,y1){
 }
 function doorAt(x,y){ for(const d of doors) if(d.x===x&&d.y===y) return d; return null; }
 function isDoorOpen(x,y){ const d=doorAt(x,y); return d&&d.position>=0.9; }
-function castRay(angle){
+function castRay(angle, wantPath){
   const dx=Math.cos(angle), dy=Math.sin(angle);
   let mapX=Math.floor(player.x), mapY=Math.floor(player.y);
   const dDX=Math.abs(1/(dx||1e-9)), dDY=Math.abs(1/(dy||1e-9));
   let stepX, stepY, sDX, sDY;
   if(dx<0){stepX=-1;sDX=(player.x-mapX)*dDX}else{stepX=1;sDX=(mapX+1-player.x)*dDX}
   if(dy<0){stepY=-1;sDY=(player.y-mapY)*dDY}else{stepY=1;sDY=(mapY+1-player.y)*dDY}
+  // the floor path: one entry per open cell entered, {distance to its
+  // entry boundary, floor height} — the floor-strip renderer walks it
+  let path=wantPath?[{d:0,h:floorH[mapY*64+mapX]||0}]:null;
   let side=0, guard=0;
   while(guard++<64){
     if(sDX<sDY){sDX+=dDX;mapX+=stepX;side=0}else{sDY+=dDY;mapY+=stepY;side=1}
-    if(mapX<0||mapY<0||mapX>=mapW||mapY>=mapH) return {dist:64,side:0,type:1,tex:0,mx:mapX,my:mapY};
+    if(mapX<0||mapY<0||mapX>=mapW||mapY>=mapH) return {dist:64,side:0,type:1,tex:0,mx:mapX,my:mapY,stepX,stepY,path};
     const t=grid[mapY][mapX];
-    if(t>0){
-      // Wolf3D doors (tile 90): an open door is not a wall — the ray
-      // passes through (DoorOpening connects the areas, WL_ACT1.C)
-      if(t===90){ const dr=doorAt(mapX,mapY); if(dr&&dr.position>=0.9){ /* open: keep tracing */ } else { const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:6,tex:wallX-Math.floor(wallX),mx:mapX,my:mapY}; } }
-      else if(t===98){ const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:7,tex:wallX-Math.floor(wallX),mx:mapX,my:mapY}; }
-      else { const dist=side===0?sDX-dDX:sDY-dDY; const wallX=side===0?player.y+dist*dy:player.x+dist*dx; return {dist:Math.max(0.05,dist),side,type:t,tex:wallX-Math.floor(wallX),mx:mapX,my:mapY}; }
+    const bDist=side===0?sDX-dDX:sDY-dDY; // distance to the boundary just crossed
+    if(t===90){ // Wolf3D door: open = not a wall, the ray passes through
+      const dr=doorAt(mapX,mapY);
+      if(dr&&dr.position>=0.9){ if(path) path.push({d:bDist,h:floorH[mapY*64+mapX]||0}); continue; }
+      const wallX=side===0?player.y+bDist*dy:player.x+bDist*dx;
+      return {dist:Math.max(0.05,bDist),side,type:6,tex:wallX-Math.floor(wallX),mx:mapX,my:mapY,stepX,stepY,path};
     }
+    if(t===98){ // pushwall
+      const wallX=side===0?player.y+bDist*dy:player.x+bDist*dx;
+      return {dist:Math.max(0.05,bDist),side,type:7,tex:wallX-Math.floor(wallX),mx:mapX,my:mapY,stepX,stepY,path};
+    }
+    if(t>0){ // a wall
+      const wallX=side===0?player.y+bDist*dy:player.x+bDist*dx;
+      return {dist:Math.max(0.05,bDist),side,type:t,tex:wallX-Math.floor(wallX),mx:mapX,my:mapY,stepX,stepY,path};
+    }
+    if(path) path.push({d:bDist,h:floorH[mapY*64+mapX]||0}); // open floor cell
   }
-  return {dist:64,side:0,type:1,tex:0,mx:mapX,my:mapY};
+  return {dist:64,side:0,type:1,tex:0,mx:mapX,my:mapY,stepX,stepY,path};
 }
 // --- combat ---
-let shootCd=0, spaceEdge=false, hurtBobT=-99; // hurtBobT: bobT when last hurt (HUD face grimace)
+let shootCd=0, ctrlEdge=false, hurtBobT=-99; // hurtBobT: bobT when last hurt (HUD face grimace)
 let projectiles=[]; // player projectiles (rocket / plasma / BFG ball)
 let hookCd=0, hookT=0, hookTarget=null; // Doom Eternal meat hook
 // --- Doom Eternal Super Shotgun meat hook ---
@@ -908,58 +1005,88 @@ function shade2(hex, f){ // multiply an #rrggbb color by f (0..1)
 }
 function mkCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
 function drawEnemySprite(type){
-  // 96x128 canvas. A left-side light (horizontal gradient + darker
-  // right edge) gives the figure volume.
+  // 96x128. Doom-style, not cartoon: muted colours, a hard dark
+  // outline, a small head, shadowed slit eyes under heavy angled
+  // brows, a rifle held across the chest and aimed at the viewer.
   const c=mkCanvas(96,128), g=c.getContext('2d');
   const R=(x,y,w,h,col)=>{ g.fillStyle=col; g.fillRect(x,y,w,h); };
   const C=(x,y,r,col)=>{ g.fillStyle=col; g.beginPath(); g.arc(x,y,r,0,6.29); g.fill(); };
+  const OR=(x,y,w,h,col)=>{ // outlined rect: dark border, coloured fill
+    g.fillStyle='#0a0a0a'; g.fillRect(x-1,y-1,w+2,h+2);
+    g.fillStyle=col; g.fillRect(x,y,w,h);
+  };
   const P={
-    guard:{skin:'#d8a878',uni:'#5a6a3a',uniD:'#3a4526',hat:'#4a5a2a'},
-    officer:{skin:'#e0b088',uni:'#2a2a3a',uniD:'#181822',hat:'#1a1a2a'},
-    ss:{skin:'#d8a878',uni:'#1a1a1a',uniD:'#0a0a0a',hat:'#111111'},
-    mutant:{skin:'#7a9a4a',uni:'#4a3a2a',uniD:'#2a2016',hat:'#3a2a1a'},
-    boss:{skin:'#d8a878',uni:'#3a3a4a',uniD:'#22222e',hat:'#2a2a3a'},
-    dog:{skin:'#8a6a4a',uni:'#6a4a2a',uniD:'#4a3218',hat:'#6a4a2a'},
-  }[type]||{skin:'#d8a878',uni:'#5a6a3a',uniD:'#3a4526',hat:'#4a5a2a'};
+    guard:{skin:'#b08a68',uni:'#4a4a34',uniD:'#2e2e20',hat:'#3a3a26'},
+    officer:{skin:'#b89878',uni:'#23232e',uniD:'#14141c',hat:'#14141c'},
+    ss:{skin:'#b08a68',uni:'#171717',uniD:'#080808',hat:'#0e0e0e'},
+    mutant:{skin:'#6a7a3e',uni:'#3a2e22',uniD:'#221a12',hat:'#2e2118'},
+    boss:{skin:'#b08a68',uni:'#2e2e3c',uniD:'#1a1a24',hat:'#22222e'},
+    dog:{skin:'#5e4630',uni:'#4a3422',uniD:'#2e2012',hat:'#4a3422'},
+  }[type]||{skin:'#b08a68',uni:'#4a4a34',uniD:'#2e2e20',hat:'#3a3a26'};
   if(type==='dog'){
-    const gr=g.createLinearGradient(14,0,82,0); gr.addColorStop(0,P.skin); gr.addColorStop(1,P.uniD);
-    g.fillStyle=gr; g.beginPath(); g.ellipse(48,82,34,22,0,0,6.29); g.fill(); // body
-    R(24,96,10,32,P.uniD); R(38,96,10,32,P.uni); R(52,96,10,32,P.uni); R(66,96,10,32,P.uniD); // legs
-    C(48,44,17,P.skin); // head
-    g.fillStyle=P.uniD; g.beginPath(); g.moveTo(32,34); g.lineTo(38,16); g.lineTo(44,32); g.fill(); // left ear
-    g.beginPath(); g.moveTo(64,34); g.lineTo(58,16); g.lineTo(52,32); g.fill(); // right ear
-    R(40,50,16,12,shade2(P.skin,0.8)); C(48,56,4,'#1a1a1a'); // snout + nose
-    C(41,40,2,'#ff4444'); C(55,40,2,'#ff4444'); // eyes
-    R(80,70,14,5,P.uniD); // tail
+    // profile, facing right: low, long, teeth showing
+    const gr=g.createLinearGradient(16,0,80,0); gr.addColorStop(0,P.skin); gr.addColorStop(1,P.uniD);
+    g.fillStyle=gr; g.beginPath(); g.ellipse(46,88,30,18,0,0,6.29); g.fill(); // body
+    g.fillStyle='#0a0a0a'; g.fillRect(16,80,60,3); // dark back line
+    R(24,100,8,22,P.uniD); R(38,100,8,22,P.uni); R(54,100,8,22,P.uni); R(66,100,8,22,P.uniD); // legs
+    R(20,118,10,4,'#0a0a0a'); R(34,118,10,4,'#0a0a0a'); R(50,118,10,4,'#0a0a0a'); R(62,118,10,4,'#0a0a0a'); // paws
+    C(72,66,14,P.skin); // skull
+    R(78,62,16,10,shade2(P.skin,0.85)); // snout
+    R(90,64,4,4,'#0a0a0a'); // nose
+    R(80,70,10,3,'#e8e8e8'); R(82,73,6,2,'#e8e8e8'); // teeth
+    g.fillStyle=P.uniD; g.beginPath(); g.moveTo(62,56); g.lineTo(58,42); g.lineTo(68,54); g.fill(); // ear, laid back
+    R(66,60,8,2,'#ff2222'); R(78,60,8,2,'#ff2222'); // red slit eyes
+    R(12,78,16,4,P.uniD); // tail, raised
     return c;
   }
-  const big=type==='boss'?1.15:1;
+  // --- humanoid ---
+  OR(30,112,13,16,'#0e0e0e'); OR(53,112,13,16,'#0e0e0e'); // boots
+  OR(31,82,11,32,P.uniD); OR(54,82,11,32,P.uniD); // legs
+  // torso (uniform, left-lit, dark outline)
   const gr=g.createLinearGradient(24,0,72,0); gr.addColorStop(0,P.uni); gr.addColorStop(1,P.uniD);
-  g.fillStyle=gr; g.fillRect(24,56,48,42); // torso
-  R(24,88,48,4,'#111111'); // belt
-  R(16,58,10,40,P.uniD); R(70,58,10,40,P.uniD); // arms
-  R(30,96,14,32,P.uniD); R(52,96,14,32,P.uniD); // legs
-  R(66,70,26,10,'#222222'); C(92,75,5,'#111111'); // gun pointing at you
-  R(34,22,28,30,P.skin); // head
-  R(48,22,14,30,'rgba(0,0,0,0.22)'); // right-side shade
+  g.fillStyle='#0a0a0a'; g.fillRect(23,43,50,41);
+  g.fillStyle=gr; g.fillRect(24,44,48,39);
+  OR(24,44,12,4,shade2(P.uni,1.25)); OR(60,44,12,4,shade2(P.uni,1.25)); // shoulder boards
+  g.fillStyle=P.uniD; g.beginPath(); g.moveTo(40,44); g.lineTo(48,54); g.lineTo(56,44); g.fill(); // collar V
+  OR(28,58,12,8,shade2(P.uni,0.85)); OR(56,58,12,8,shade2(P.uni,0.85)); // chest pockets
+  C(48,62,1.2,'#c8c8c8'); C(48,72,1.2,'#c8c8c8'); // buttons
+  OR(24,79,48,5,'#0e0e0e'); R(44,79,8,5,'#8a7a4a'); // belt + buckle
+  OR(16,46,9,36,P.uniD); // left arm, down
+  OR(66,50,9,28,P.uniD); // right arm, upper
+  OR(58,72,16,7,P.uniD); // right forearm across the chest
+  // rifle across the lower chest, muzzle aimed at the viewer
+  OR(30,74,24,7,'#1a1a1a'); // stock
+  OR(52,70,10,10,'#222222'); // receiver
+  C(64,75,7,'#111111'); C(64,75,4,'#3a3a3a'); C(64,75,1.5,'#000000'); // muzzle ring + bore
+  // head (small), skin with a dark right-side shade
+  OR(35,18,26,26,P.skin);
+  R(52,18,9,26,'rgba(0,0,0,0.25)');
+  // face: heavy angled brows, slit eyes, nose shadow, grim mouth
+  g.fillStyle='#0a0a0a';
+  g.beginPath(); g.moveTo(38,26); g.lineTo(46,28); g.lineTo(46,30); g.lineTo(38,29); g.fill(); // left brow
+  g.beginPath(); g.moveTo(58,26); g.lineTo(50,28); g.lineTo(50,30); g.lineTo(58,29); g.fill(); // right brow
+  R(40,32,6,2,'#0a0a0a'); R(50,32,6,2,'#0a0a0a'); // slit eyes
+  R(47,34,2,6,'rgba(0,0,0,0.3)'); // nose shadow
+  R(42,41,12,1.5,'#0a0a0a'); // grim mouth
+  // headgear
   if(type==='mutant'){
-    g.fillStyle=P.hat;
-    g.beginPath(); g.moveTo(34,22); g.lineTo(40,8); g.lineTo(46,22); g.fill();
-    g.beginPath(); g.moveTo(46,22); g.lineTo(52,6); g.lineTo(58,22); g.fill();
-    g.beginPath(); g.moveTo(58,22); g.lineTo(64,10); g.lineTo(66,22); g.fill(); // spiky hair
-    C(41,36,2.5,'#ff2222'); C(55,36,2.5,'#ff2222'); // red eyes
-    R(42,46,12,3,'#1a1a1a'); // grim mouth
+    R(38,20,3,8,'rgba(0,0,0,0.4)'); R(54,22,3,6,'rgba(0,0,0,0.4)'); // scars
+    R(40,32,6,2,'#ff2222'); R(50,32,6,2,'#ff2222'); // red eyes
+    R(42,41,12,2,'#1a1a1a'); // wider grim mouth
+  } else if(type==='officer'||type==='boss'){
+    OR(32,10,32,10,P.hat); OR(30,18,36,4,P.hat); // peaked cap: crown + brim
+    R(30,18,36,2,'#000000'); // visor shadow
+    C(48,15,2,'#c8a84a'); // badge
   } else {
-    if(type==='officer'||type==='boss'){
-      R(32,12,32,12,P.hat); R(30,24,36,5,P.hat); C(48,18,2,'#ffd75e'); // peaked cap + badge
-    } else {
-      g.fillStyle=P.hat; g.beginPath(); g.arc(48,24,17,Math.PI,0); g.fill(); R(30,22,36,4,P.hat); // helmet
-    }
-    C(41,36,2,'#111111'); C(55,36,2,'#111111'); // eyes
-    R(44,44,8,2,'#8a5a3a'); // mouth
-    if(type==='boss'){ R(24,56,12,5,'#ffd75e'); R(60,56,12,5,'#ffd75e'); R(42,46,12,3,'#111111'); } // epaulettes + moustache
+    g.fillStyle=P.hat; g.beginPath(); g.arc(48,20,15,Math.PI,0); g.fill(); // steel helmet dome
+    OR(30,18,36,4,P.hat); // brim
+    g.fillStyle='rgba(255,255,255,0.14)'; g.beginPath(); g.arc(42,12,6,Math.PI,0); g.fill(); // highlight
   }
-  if(big!==1){ const c2=mkCanvas(96,128), g2=c2.getContext('2d'); g2.drawImage(c,0,0); return c2; }
+  if(type==='boss'){
+    OR(24,44,12,4,'#c8a84a'); OR(60,44,12,4,'#c8a84a'); // gold epaulettes
+    C(40,68,2,'#c8a84a'); C(48,68,2,'#c8a84a'); C(56,68,2,'#c8a84a'); // medals
+    R(40,39,16,3,'#0a0a0a'); // moustache
+  }
   return c;
 }
 function drawGunSprite(key){
@@ -1130,7 +1257,10 @@ function update(dt){
   if(keys['ArrowDown']) player.pitch=Math.max(-0.4,player.pitch-0.9*dt);
   // Jump (J): simple gravity, eye height = 0.5 + z tiles. Holding J
   // bunny-hops on landing.
-  if(keys['KeyJ']&&player.z===0){ player.vz=2.6; }
+  if((keys['KeyJ']||keys['Space'])&&player.z===0){ player.vz=2.6; }
+  // Doom sector heights: the eye rides the floor you're standing on
+  const targetFH=floorH[Math.floor(player.y)*64+Math.floor(player.x)]||0;
+  player.floorH += (targetFH-(player.floorH||0))*Math.min(1, dt*10);
   if(player.z>0||player.vz!==0){ player.vz-=7*dt; player.z+=player.vz*dt; if(player.z<=0){ player.z=0; player.vz=0; } }
   // Doom keyboard turning (g_game.c): slow 61.5 deg/s for the first
   // 6 tics held, then 123 deg/s walk, 246.1 deg/s run. Mouse look is
@@ -1193,8 +1323,8 @@ function update(dt){
   if(gloryT>0){ gloryT-=dt; player.momx*=0.9; player.momy*=0.9; } // locked in the execution
   if(hookT>0){ hookT-=dt; if(hookT<=0||!hookTarget||hookTarget.dead){ hookTarget=null; hookT=0; } }
   const cw=WEAPONS[player.weapon];
-  if(gloryT<=0 && ((cw.auto&&(keys['Space']||firing)) || spaceEdge)) tryShoot();
-  spaceEdge=false;
+  if(gloryT<=0 && ((cw.auto&&(keys['ControlLeft']||keys['ControlRight']||firing)) || ctrlEdge)) tryShoot();
+  ctrlEdge=false;
   if(keys['KeyT']){ keys['KeyT']=false; throwBomb(); }
   if(keys['KeyF']){ keys['KeyF']=false; fireHook(); }
   if(keys['KeyE']){ keys['KeyE']=false; cmdUse(); }
@@ -1365,6 +1495,32 @@ function floorComplete(){
 }
 // --- rendering: canvas raycaster (ojread one-char-per-column walls,
 // drawn enemy/gun sprites, overscan scene + bobbed viewport) ---
+// Floor strips: where the ray crosses a raised floor, redraw that
+// column's floor in strips along the ray's path (near to far, so the
+// nearer floor occludes the farther — the painter's rule). A step up
+// is a dark riser face; a drop is a shadowed edge line. The flat floor
+// bands underneath already drew the ground floor.
+function drawFloorStrips(ci, r, cosDa, horizon, projDist, eyeZ){
+  const path=r.path;
+  let curY=scene.height, prevH=path[0].h;
+  for(let i=0;i<path.length;i++){
+    const seg=path[i];
+    const dFar=(i+1<path.length)?path[i+1].d:r.dist;
+    const dC=Math.max(0.15, dFar*cosDa);
+    const yFar=horizon+(eyeZ-seg.h)*projDist/dC;
+    if(yFar<curY){
+      let col=shadeColor(theme.floor, Math.min(11, dC*0.6));
+      if(seg.h>prevH) col=shadeColor(theme.floor, Math.min(11, dC*0.6)+2.5); // riser face
+      else if(seg.h<prevH) col=shadeColor(theme.floor, Math.min(11, dC*0.6)+1); // past a drop
+      sctx.fillStyle=col;
+      sctx.fillRect(ci*CHAR_W, yFar, CHAR_W+1, curY-yFar);
+      if(seg.h!==prevH){ sctx.fillStyle='rgba(0,0,0,0.45)'; sctx.fillRect(ci*CHAR_W, yFar, CHAR_W+1, 3); } // step edge
+      curY=yFar;
+    }
+    prevH=seg.h;
+    if(curY<=horizon) break;
+  }
+}
 function render(){
   // Doom view bob, reduced: the old bob shifted the image up to
   // +/-8 rows (about 50px) and exposed black borders at the edges.
@@ -1376,7 +1532,7 @@ function render(){
   const bobY=Math.sin(bobT*2*Math.PI/DOOM.BOB_CYCLE)*bobU*2.5; // px, ~40% of old
   const bobX=Math.sin(bobT*2*Math.PI/DOOM.BOB_CYCLE*0.5)*bobU*1.0;
   const shX=shake>0?rr(-shake,shake)*2:0, shY=shake>0?rr(-shake,shake)*2:0;
-  const pitch=player.pitch||0, eyeZ=0.5+(player.z||0);
+  const pitch=player.pitch||0, eyeZ=0.5+(player.floorH||0)+(player.z||0);
   const SW=scene.width, SH=scene.height, k=VW/1080;
   const projDist=(VW/2)/Math.tan(FOV/2);
   const horizon=SH/2 + Math.tan(pitch)*projDist;
@@ -1387,22 +1543,31 @@ function render(){
     sctx.fillStyle=shadeColor(ceil?theme.ceil:theme.floor, Math.min(11,d));
     sctx.fillRect(0,y,SW,4);
   }
-  // walls: one ray per character column, one character per column
-  // stretched to the wall's full height (the ojread/ascii-fps trick)
+  // walls: Doom-style textured slices — one ray per column, one
+  // 1px-wide slice of a 64x64 texture stretched to the wall's height
+  // (nearest-neighbour, so it stays crunchy). The wall's base and top
+  // come from the floor/ceiling heights of the open cell on the
+  // player's side of the wall — Doom sector heights.
   for(let ci=0;ci<nCols;ci++){
     const cx=ci*CHAR_W + CHAR_W/2;
     const a=player.ang + Math.atan((cx-SW/2)/projDist);
-    const r=castRay(a);
-    const dist=r.dist*Math.cos(a-player.ang);
+    const cosDa=Math.cos(a-player.ang);
+    const r=castRay(a, true);
+    const dist=r.dist*cosDa;
     zbuf[ci]=dist;
     if(r.mx>=0&&r.my>=0&&r.mx<mapW&&r.my<mapH) seen[r.my*64+r.mx]=1;
-    const wallH=projDist/Math.max(0.15,dist);
-    const top=horizon-(1-eyeZ)*wallH, bot=horizon+eyeZ*wallH;
-    const gl=WALL_GLYPH[r.type]||WALL_GLYPH[1];
-    const base=theme.wall[(r.type-1)%theme.wall.length]; // per-floor palette
-    let col=shadeColor(base, dist);
-    if(r.side===1) col=shadeColor(base, dist+1.5);
-    sctx.drawImage(glyphTile(gl.ch, col), ci*CHAR_W, top, CHAR_W, bot-top);
+    const pcx=r.side===0?r.mx-r.stepX:r.mx, pcy=r.side===0?r.my:r.my-r.stepY;
+    const fh=(pcx>=0&&pcy>=0&&pcx<mapW&&pcy<mapH)?floorH[pcy*64+pcx]:0;
+    const ch=(pcx>=0&&pcy>=0&&pcx<mapW&&pcy<mapH)?ceilH[pcy*64+pcx]:1;
+    const top=horizon-(ch-eyeZ)*projDist/Math.max(0.15,dist);
+    const bot=horizon+(eyeZ-fh)*projDist/Math.max(0.15,dist);
+    // raised floor in this column's ray: redraw the floor in strips
+    if(r.path&&r.path.some(pp=>pp.h!==0)) drawFloorStrips(ci, r, cosDa, horizon, projDist, eyeZ);
+    // texture slice (1px overlap kills the seam between columns)
+    const texX=Math.min(63, Math.floor(r.tex*64));
+    const lvl=Math.min(3, (dist<3?0:dist<6?1:dist<10?2:3) + (r.side===1?1:0));
+    const texs=WALL_TEX[themeIdx][r.type]||WALL_TEX[themeIdx][1];
+    sctx.drawImage(texs[lvl], texX, 0, 1, 64, ci*CHAR_W, top, CHAR_W+1, bot-top);
   }
   // fog of war: the area around the player is always revealed
   const px=Math.floor(player.x), py=Math.floor(player.y);
@@ -1425,7 +1590,8 @@ function render(){
     if(Math.abs(da)>FOV/2+0.3) continue;
     const sx=SW/2 + Math.tan(da)*projDist;
     const h=projDist/d*s.scale, w=h*0.7;
-    const bot=horizon+eyeZ*projDist/d, top=bot-h;
+    const sFH=floorH[Math.floor(s.y)*64+Math.floor(s.x)]||0; // stands on its own floor
+    const bot=horizon+(eyeZ-sFH)*projDist/d, top=bot-h;
     if(s.proj){
       const r=Math.max(2, h*0.12);
       sctx.fillStyle=s.proj==='rocket'?'#ff8844':s.proj==='plasma'?'#66ccff':'#44ff66';
@@ -1613,8 +1779,8 @@ function overlayTitle(){
     'A WOLFENSTEIN-STYLE RAYCASTER IN DENSE ASCII ART',
     'Procedural floors. Roguelike runs. Permadeath. No mercy.',
     '',
-    'WASD move — mouse look — click / Space shoot — 1-8 Doom weapons',
-    'Q dash — T bomb — F meat hook — Shift run — P pause',
+    'WASD move — mouse look — click / Ctrl shoot — 1-8 Doom weapons',
+    'Space / J jump — Q dash — T bomb — F meat hook — Shift run — P pause',
     'E use: doors, pushwalls, elevator — Wolf3D rules',
     'Find the [EXIT] portal. Kill. Level up. Pick upgrades. Go deeper.',
     '',
@@ -1653,7 +1819,8 @@ function overlayDead(){
 document.addEventListener('keydown', e=>{
   unlockAudio();
   keys[e.code]=true;
-  if(e.code==='Space'){ e.preventDefault(); if(state==='play') spaceEdge=true; }
+  if(e.code==='Space'){ e.preventDefault(); } // Space is jump (held, in update)
+  if((e.code==='ControlLeft'||e.code==='ControlRight')&&state==='play') ctrlEdge=true; // Ctrl is shoot
   if(state==='play'&&(e.code==='ArrowUp'||e.code==='ArrowDown')) e.preventDefault(); // pitch, not page scroll
   if(state==='title'&&(e.code==='Enter'||e.code==='Space')){ newRun(); return; }
   if(state==='dead'&&e.code==='KeyN'){ newRun(); return; }
@@ -1750,7 +1917,7 @@ function loop(t){
   if(state!=='play') pollPadMenus();
   if(state==='play') update(dt);
   else if(state==='title'&&!player){ // idle title backdrop: fake a level behind the title
-    if(!grid){ runSeed=42; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,ammo:{bullets:50,shells:16,rockets:10,cells:80},kills:0,score:0,gold:0,dead:false,pitch:0,z:0,vz:0}; genLevel(1); player.ang+=dt*0.1; }
+    if(!grid){ runSeed=42; player={x:0,y:0,ang:0,hp:100,maxHp:100,armor:0,level:1,xp:0,xpNext:50,xpMul:1,dmgMul:1,rateMul:1,speedMul:1,lifesteal:0,crit:0.05,regen:0,bombs:2,maxBombs:3,dashCd:0,dashCdMax:3,weapon:1,ammo:{bullets:50,shells:16,rockets:10,cells:80},kills:0,score:0,gold:0,dead:false,pitch:0,z:0,vz:0,floorH:0}; genLevel(1); player.ang+=dt*0.1; }
   }
   render();
   requestAnimationFrame(loop);
