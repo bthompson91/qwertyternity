@@ -1,6 +1,6 @@
-# QWERTYSTEIN
+# QWERTYTERNITY
 
-A Wolfenstein-style raycaster running entirely in the browser. No build step, no libraries — one `index.html` (plus a Google Fonts link for the HUD typeface). Walls are Doom-style 64×64 texture slices, enemies are drawn sprites, and the floors have Doom-style sector heights (raised platforms, a boss dais).
+An Eviternity-style raycaster running entirely in the browser. No build step, no libraries — one `index.html` (plus a Google Fonts link for the HUD typeface). It started life as QWERTYSTEIN (a Wolfenstein-style raycaster); it is now QWERTYTERNITY — Doom, but bigger, in the spirit of Eviternity: epic scale, grand halls, new monsters, and a heavenly Astral episode. Walls are Doom-style 64×64 texture slices, enemies are drawn sprites, and the floors have Doom-style sector heights (raised platforms, a boss dais).
 
 Play it live: https://bthompson91.github.io/qwertystein/
 
@@ -31,7 +31,9 @@ Yes — any standard gamepad works via the browser Gamepad API, no install neede
 
 ## Procedural levels
 
-Every floor is generated from the run seed: 8–10 rooms connected by corridors, on a 36×36 grid, with a new theme every floor (Castle, Crypt, Bunker, Vault). Enemy count, health and damage scale with depth. A boss spawns every third floor. The exit portal is always in the room farthest from your spawn.
+Every floor is generated from the run seed: up to 16 rooms connected by corridors on a 64×64 grid, plus one **grand hall** per floor — a huge arena (14–20 × 10–13 tiles) with a 2.5-tall ceiling, a platform, and a pack of enemies. Enemy count, health and damage scale with depth. The exit portal is always in the room farthest from your spawn.
+
+Floors run in **Eviternity episodes**, one theme per 4 floors: **Episode 1 — UAC Tech Base** (floors 1–4), **Episode 2 — Hell's Gate** (5–8), **Episode 3 — Gothic** (9–12), **Episode 4 — Astral** (13–16, the heavenly finale, with its own bright gold-and-white textures and an original heroic track), then the cycle repeats. A boss spawns every third floor: **Hans Grosse** on floors 3, 9, 15… and **the Annihilator** — Eviternity's big Baron — on every 6th floor.
 
 ## Roguelike progression
 
@@ -52,7 +54,7 @@ The gameplay logic is ported from the real Wolfenstein 3D source (id Software, 1
 Ported, with file references in the code:
 
 - **Maps** (`WL_DEF.H`, `WL_GAME.C`): 64×64 grid (`MAPSIZE 64`), tile codes for walls, doors (90–101), pushwalls (98), elevator (21), exit (99), ambush (106).
-- **Enemies** (`WL_ACT2.C`): guard 25 HP / 100 pts, officer 50 / 400, SS 100 / 500, dog 1 / 200, mutant 55 / 700, Hans Grosse 850 / 5000; drops (clip +4, Hans drops the gold key).
+- **Enemies** (`WL_ACT2.C`): guard 25 HP / 100 pts, officer 50 / 400, SS 100 / 500, dog 1 / 200, mutant 55 / 700, Hans Grosse 850 / 5000; drops (clip +4, Hans drops the gold key). Eviternity monsters: **Nightmare Demon** (from floor 2, 40 HP — a shadowy spectre that flickers in and out of sight, fast, bites), **Astral Cacodemon** (from floor 5, 120 HP — a floating red sphere that spits a spread of 3 fireballs), **the Annihilator** (every 6th floor, 1200 HP — a bulkier horned Baron that hurls green hellfire).
 - **Enemy AI** (`WL_STATE.C`): `T_Stand` / `T_Path` / `T_Chase` / `T_Shoot` / `T_DogChase` / `T_Bite` state machine, `SightPlayer` reaction delays, `FirstSighting` speed multipliers, `CheckLine`, attack chance `(tics<<4)/dist`, shoot hit-chance and damage tables by distance, pain state (10 tics, dogs have none), damage doubled on unaware enemies.
 - **Weapons** (`WL_AGENT.C`): `GunAttack` hitscan pick + damage by distance (`dist<2: Rnd/4, dist<4: Rnd/6`), `KnifeAttack` (1.5 tiles, `Rnd>>4`), `ClipMove` wall sliding, `Cmd_Use` on **E**.
 - **Doors** (`WL_ACT1.C`): sliding doors, open ~3–4 s (`OPENTICS 300`), re-open if blocked, locks 1–4 needing keys, enemies open them too.
@@ -89,8 +91,7 @@ has 1–2 raised platforms (a 0.5 step you walk straight up, no jumping
 needed) in tall rooms with 1.5 ceilings, and a dais under the boss on
 every 3rd floor. Your eye rides the floor you're standing on, walls
 take their base and ceiling from the room you're in, and the step
-faces are drawn as dark risers. There are no stairs or multi-storey
-floors — it's Doom's sector heights, not a second storey.
+faces are drawn as dark risers. And every floor has a **grand hall** — a huge arena with a 2.5 ceiling, the tallest space in the game. There are no stairs or multi-storey floors — it's Doom's sector heights, not a second storey.
 
 ## Unicode + ASCII art
 
@@ -98,10 +99,15 @@ Walls are 64×64 textures (brick courses, stone blocks, wood planks,
 metal panels with rivets, bevelled vault blocks, a sliding door with a
 barred window, a pushwall with a carved statue face), tinted from the
 floor theme's palette, drawn one 1px-wide slice per ray column and
-nearest-neighbour so they stay crunchy. Enemies and guns are drawn
+nearest-neighbour so they stay crunchy. Each Eviternity episode has
+its own OTEX-style textures: the tech base uses clean panels with a
+glowing trim, Hell and Gothic use a pointed-arch gothic texture, and
+the Astral episode uses bright marble with gold veins. Enemies and guns are drawn
 sprites, not ASCII: muted, dark-outlined figures for guard, officer,
 SS, dog (in profile, teeth showing), mutant and Hans Grosse — slit
-eyes under heavy brows, a rifle aimed at the viewer — and Doom-style
+eyes under heavy brows, a rifle aimed at the viewer — plus Eviternity's
+own monsters: a shadowy Nightmare Demon, a floating Astral Cacodemon,
+and the horned Annihilator — and Doom-style
 viewmodels for all eight weapons. Items (first aid, food, clip,
 shells, rockets, cells, cross, chalice, bible, crown, gold key, bomb,
 elevator exit) are pixel-art icons rasterised from the old ASCII sprites.
@@ -161,7 +167,7 @@ hits an enemy once (in Doom all 40 can pile onto one target).
 
 ## MIDI music and sound effects
 
-Three original compositions, embedded as base64 Standard MIDI Files
+Four original compositions, embedded as base64 Standard MIDI Files
 and played by a tiny SMF parser + Web Audio General-MIDI-ish synth
 written for the game — no audio files, no libraries, no network.
 - **Title** — 80 BPM, A minor, string pads + piano arpeggio.
@@ -169,6 +175,9 @@ written for the game — no audio files, no libraries, no network.
   kick/snare/hats. Plays on normal floors.
 - **Boss** — 170 BPM, E minor, faster riff, syncopated kick. Plays on
   every 3rd floor (boss floors).
+- **Astral** — 140 BPM, D major, a bright heroic loop (lead, driving
+  bass, pad, drums) written for the Astral episode. Plays on floors
+  13–16 (and every 4th episode after that).
 Music starts on the first key/click (browsers need a gesture for
 audio), switches per floor, and stops on death. M mutes everything.
 

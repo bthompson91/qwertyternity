@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QWERTYSTEIN — dense ASCII raycaster</title>
+<title>QWERTYTERNITY — an Eviternity-style raycaster</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bungee+Tint&display=swap" rel="stylesheet">
@@ -37,8 +37,8 @@
 </head>
 <body>
 <div id="wrap">
-<h1>QWERTY<span>STEIN</span> — dense ASCII raycaster</h1>
-<p class="sub">Procedurally generated castle. Every run is a new seed. Die, and the run is gone. Clear a floor, pick an upgrade, go deeper. Doom movement: momentum, friction, and view bob.</p>
+<h1>QWERTY<span>TERNITY</span> — an Eviternity-style raycaster</h1>
+<p class="sub">Eviternity-scale procedural floors. Every run is a new seed. Die, and the run is gone. Clear a floor, pick an upgrade, go deeper. Doom movement: momentum, friction, and view bob.</p>
 <canvas id="game" width="1080" height="600"></canvas>
 <button id="fsbtn">[ FULLSCREEN ]</button>
 <div id="touch">
@@ -52,14 +52,14 @@
 <pre id="keys"><b>WASD</b> move &nbsp; <b>Mouse</b> look (click to lock) &nbsp; <b>← →</b> turn &nbsp; <b>Space / J</b> jump &nbsp; <b>Click / Ctrl</b> shoot
 <b>1-8</b> weapons: 1 Fist  2 Pistol  3 Shotgun  4 Super Shotgun  5 Chaingun  6 Rocket Launcher  7 Plasma Gun  8 BFG9000 &nbsp; <b>F</b> meat hook (Super Shotgun) &nbsp; <b>Shift</b> run
 <b>Q</b> dash &nbsp; <b>T</b> throw bomb &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>N</b> new run (on death) &nbsp; <b>E</b> use (door / pushwall / elevator) / <b>glory kill</b> a staggered enemy
-<b>QWERTY tip:</b> strafe with <b>Q/E</b>? No — Q is dash, E is nothing. Strafe is A/D while turning with the mouse. That's the QWERTYSTEIN way.
+<b>QWERTY tip:</b> strafe with <b>Q/E</b>? No — Q is dash, E is nothing. Strafe is A/D while turning with the mouse. That's the QWERTYTERNITY way.
 Find the glowing <b>[EXIT]</b> portal on each floor. Kills give XP. Level up: press <b>1 / 2 / 3</b> to pick an upgrade.
 <b>Phone:</b> left pad = move stick, right pad = drag to look (tap it to fire), FIRE / DASH / BOMB / JUMP buttons below. Also works by touch on the game itself: left half drag = move, right half drag = look, tap right = fire.
 <b>Joypad:</b> plug in any standard gamepad (Xbox / PlayStation / Switch Pro / 8BitDo) and press a button — left stick moves, right stick looks (push up/down to look up/down), RT or A fires, X meat hooks (Super Shotgun), B dashes, Y bombs, LB/RB change weapon, Start pauses. On upgrade screens LB/RB pick, A confirms.</pre>
 </div>
 <script>
 'use strict';
-// ============ QWERTYSTEIN ============
+// ============ QWERTYTERNITY ============
 // Dense ASCII raycaster. No build step, no assets, no libraries.
 // One canvas, one character cell per ray column slice, wall textures
 // drawn as 8x8 ASCII tiles, sprites as ASCII billboards.
@@ -169,12 +169,16 @@ function rr(a,b){return a+rng()*(b-a)}
 function ri(a,b){return Math.floor(rr(a,b+1))}
 function pick(arr){return arr[Math.floor(rng()*arr.length)]}
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
-// --- themes, one per floor cycle ---
+// --- themes: Eviternity episodes, one per 4 floors ---
+// Episode 1 (floors 1-4): UAC tech base. 2 (5-8): Hell's Gate.
+// 3 (9-12): Gothic. 4 (13-16): Astral — the heavenly finale.
+// Then the cycle repeats. Each theme lists the wall texture types
+// it uses (walls:), OTEX-style.
 const THEMES=[
- {name:'CASTLE', wall:['#b89a5e','#8a8a8a','#7a5a34','#9aa0a8'], floor:'#5a4632', ceil:'#1c1c26', fog:'#0a0a0a'},
- {name:'CRYPT',  wall:['#6a8a6a','#5a6a7a','#4a5a4a','#7a7a6a'], floor:'#2e3a2e', ceil:'#101018', fog:'#050805'},
- {name:'BUNKER', wall:['#8a7a5a','#6a6a6a','#5a4a3a','#8a8a7a'], floor:'#3a342a', ceil:'#181818', fog:'#080808'},
- {name:'VAULT',  wall:['#a08a4a','#7a7a8a','#8a5a3a','#9a8a5a'], floor:'#3a2e1e', ceil:'#14141e', fog:'#0a0805'},
+ {name:'UAC TECH BASE', ep:1, wall:['#7a8a9a','#5a6a7a','#8a9aa8','#6a7a8a'], floor:'#2a2e34', ceil:'#14161c', fog:'#05060a', walls:[4,9]},
+ {name:"HELL'S GATE",   ep:2, wall:['#8a3a2a','#6a2a1a','#a04a2a','#7a3a3a'], floor:'#2e1a12', ceil:'#120a08', fog:'#080304', walls:[1,8]},
+ {name:'GOTHIC',        ep:3, wall:['#6a6a7a','#4a4a5a','#8a7a4a','#5a5a6a'], floor:'#1e1e26', ceil:'#0e0e14', fog:'#050508', walls:[2,8]},
+ {name:'ASTRAL',        ep:4, wall:['#c8b060','#e8d8a0','#b8a05a','#d8c888'], floor:'#3a3424', ceil:'#1e1c12', fog:'#0a0805', walls:[5,10]},
 ];
 // Walls: the ojread/ascii-fps trick (github.com/ojread/ascii-fps) —
 // one character per ray column, stretched vertically to the wall's
@@ -233,6 +237,28 @@ function makeWallTex(base, type){
     g.fillStyle='#888'; g.fillRect(26,8,2,10); g.fillRect(34,8,2,10); // bars
     g.fillStyle='#ddd'; g.beginPath(); g.arc(56,36,3,0,6.29); g.fill(); // handle
     g.fillStyle='rgba(0,0,0,0.35)'; g.fillRect(31,4,2,56); // centre seam
+  } else if(type===8){ // gothic arch: columns + a pointed arch
+    g.fillStyle=shade2(base,0.5); g.fillRect(0,0,64,64);
+    for(let row=0;row<4;row++) for(let bx=0;bx<64;bx+=16) blk(bx+1,row*16+1,14,14,0.8+R()*0.25);
+    g.fillStyle=shade2(base,1.3); g.fillRect(6,0,6,64); g.fillRect(52,0,6,64); // columns
+    g.fillStyle='rgba(0,0,0,0.5)'; g.beginPath(); g.moveTo(18,64); g.lineTo(18,28); g.lineTo(32,8); g.lineTo(46,28); g.lineTo(46,64); g.fill(); // arch opening
+    g.fillStyle=shade2(base,1.5); g.fillRect(30,6,4,4); // keystone
+  } else if(type===9){ // tech panel: clean plates, glowing trim, vent
+    g.fillStyle=shade2(base,0.45); g.fillRect(0,0,64,64);
+    for(let py=0;py<64;py+=32) for(let px=0;px<64;px+=32){
+      blk(px+1, py+1, 30, 30, 0.95+R()*0.15);
+      g.fillStyle='#66e0ff'; g.fillRect(px+1,py+1,30,1); // glowing trim
+      g.fillStyle='rgba(0,0,0,0.35)'; g.fillRect(px+4,py+4,2,2); g.fillRect(px+27,py+4,2,2);
+    }
+    g.fillStyle='rgba(0,0,0,0.5)';
+    for(let vy=40;vy<58;vy+=4) g.fillRect(36,vy,24,2); // vent grille
+  } else if(type===10){ // astral marble: bright, gold veins, soft glow
+    g.fillStyle=shade2(base,1.1); g.fillRect(0,0,64,64);
+    g.fillStyle='rgba(255,255,255,0.25)'; g.fillRect(0,0,64,10); // top glow
+    g.strokeStyle='#ffd75e'; g.lineWidth=1.5;
+    g.beginPath(); g.moveTo(0,50); g.lineTo(22,30); g.lineTo(40,44); g.lineTo(64,18); g.stroke(); // gold vein
+    g.beginPath(); g.moveTo(10,64); g.lineTo(30,40); g.lineTo(50,58); g.stroke();
+    g.fillStyle='rgba(0,0,0,0.15)'; g.fillRect(0,60,64,4);
   } else { // pushwall: carved stone with a statue face
     g.fillStyle=shade2(base,0.4); g.fillRect(0,0,64,64);
     for(let row=0;row<4;row++) for(let bx=0;bx<64;bx+=16) blk(bx+1,row*16+1,14,14,0.8+R()*0.3);
@@ -243,10 +269,10 @@ function makeWallTex(base, type){
   }
   return c;
 }
-// WALL_TEX[themeIdx][type][shadeLevel] — 4 themes x 7 types x 4 levels
+// WALL_TEX[themeIdx][type][shadeLevel] — 4 themes x 10 types x 4 levels
 const WALL_TEX=THEMES.map(th=>{
   const per={};
-  for(let t=1;t<=7;t++){
+  for(let t=1;t<=10;t++){
     const base=makeWallTex(th.wall[(t-1)%th.wall.length], t);
     const levels=[base];
     for(const a of [0.3,0.55,0.75]){
@@ -320,7 +346,10 @@ const SPRITES={
 // machine gun if the player lacks it; Hans drops the gold key.
 const ENEMY_TYPES={
  guard:  {hp:25, dmg:7,  speed:1.1, patrol:0.55, chaseMul:3, range:7, xp:10, score:100, color:'#d8b060', spr:'guard',   fire:1.6, reaction:4},
- dog:    {hp:1,  dmg:6,  speed:2.3, patrol:1.5,  chaseMul:2, range:1.4, xp:12, score:200, color:'#c09070', spr:'dog',   fire:0.9, reaction:8},
+ dog:    {hp:1,  dmg:6,  speed:2.3, patrol:1.5,  chaseMul:2, range:1.4, xp:12, score:200, color:'#c09070', spr:'dog',   fire:0.9, reaction:8, melee:true},
+ nightmare:{hp:40, dmg:14, speed:2.6, patrol:1.2, chaseMul:2, range:1.6, xp:25, score:600, color:'#a040a0', spr:'nightmare', fire:0.9, reaction:6, melee:true},
+ astral:  {hp:120,dmg:10, speed:0.9, patrol:0.4,  chaseMul:2, range:10, xp:50, score:1000,color:'#ff6060', spr:'astral', fire:2.2, reaction:4, shots:1, hover:0.35},
+ annihilator:{hp:1200,dmg:22,speed:1.2,patrol:0.4, chaseMul:3, range:10, xp:200,score:8000,color:'#c04040', spr:'annihilator', fire:1.6, reaction:1, shots:1, name:'ANNIHILATOR'},
  officer:{hp:50, dmg:12, speed:1.5, patrol:0.55, chaseMul:5, range:8, xp:20, score:400, color:'#a0c0e0', spr:'officer', fire:1.3, reaction:2},
  ss:     {hp:100,dmg:14, speed:1.4, patrol:0.55, chaseMul:4, range:8, xp:35, score:500, color:'#b0b0b0', spr:'ss',      fire:1.1, reaction:6, shots:4},
  mutant: {hp:55, dmg:16, speed:1.0, patrol:0.55, chaseMul:3, range:6, xp:30, score:700, color:'#80d080', spr:'mutant', fire:1.8, reaction:6, shots:2},
@@ -369,6 +398,10 @@ const MIDI_SONGS={
  title:'TVRoZAAAAAYAAAABAeBNVHJrAAADEQDAMADBAAD/UQMLcbAAkDk3AJA8NwCQQDcAkTlGgXCRPEYAgTkAgXCRQEYAgTwAgXCRRUYAgUAAgXCRQEYAgUUAgXCRPEYAgUAAgXCRRUYAgTwAgXCRPEYAgUUAgXCQNTcAkDk3AJA8NwCRNUYAgDkAAIA8AACAQAAAgTwAgXCROUYAgTUAgXCRPEYAgTkAgXCRQUYAgTwAgXCRPEYAgUEAgXCROUYAgTwAgXCRQUYAgTkAgXCROUYAgUEAgXCQNzcAkDw3AJBANwCRN0YAgDUAAIA5AACAPAAAgTkAgXCRPEYAgTcAgXCRQEYAgTwAgXCRQ0YAgUAAgXCRQEYAgUMAgXCRPEYAgUAAgXCRQ0YAgTwAgXCRPEYAgUMAgXCQNzcAkDs3AJA+NwCRN0YAgDcAAIA8AACAQAAAgTwAgXCRO0YAgTcAgXCRPkYAgTsAgXCRQ0YAgT4AgXCRPkYAgUMAgXCRO0YAgT4AgXCRQ0YAgTsAgXCRO0YAgUMAgXCQOTcAkDw3AJBANwCROUYAgDcAAIA7AACAPgAAgTsAgXCRPEYAgTkAgXCRQEYAgTwAgXCRRUYAgUAAgXCRQEYAgUUAgXCRPEYAgUAAgXCRRUYAgTwAgXCRPEYAgUUAgXCQNTcAkDk3AJA8NwCRNUYAgDkAAIA8AACAQAAAgTwAgXCROUYAgTUAgXCRPEYAgTkAgXCRQUYAgTwAgXCRPEYAgUEAgXCROUYAgTwAgXCRQUYAgTkAgXCROUYAgUEAgXCQNzcAkDw3AJBANwCRN0YAgDUAAIA5AACAPAAAgTkAgXCRPEYAgTcAgXCRQEYAgTwAgXCRQ0YAgUAAgXCRQEYAgUMAgXCRPEYAgUAAgXCRQ0YAgTwAgXCRPEYAgUMAgXCQNDcAkDg3AJA7NwCRNEYAgDcAAIA8AACAQAAAgTwAgXCROEYAgTQAgXCRO0YAgTgAgXCRQEYAgTsAgXCRO0YAgUAAgXCROEYAgTsAgXCRQEYAgTgAgXCROEYAgUAAgXCANAAAgDgAAIA7AACBOAAA/y8A',
  combat:'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',
  boss:'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',
+ // Astral: an original 16-bar heroic loop in D major (140 BPM) for the
+ // Astral episode (floors 13-16) — lead, driving bass, pad, drums.
+ // Generated with a small Python SMF writer, not a copy of any track.
+ astral:'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',
 };
 function b64ToBytes(b64){ const bin=atob(b64); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i); return a; }
 // Tiny SMF parser (format 0/1): header, tracks, VLQ deltas, running
@@ -563,26 +596,36 @@ function newRun(){
   player.ammo={bullets:50,shells:16,rockets:10,cells:80};
   genLevel(1);
   keys['Space']=false;
-  state='play'; log('RUN #'+runSeed+' — floor 1, '+theme.name);
+  state='play'; log('RUN #'+runSeed+' — EPISODE 1, '+theme.name+' — floor 1');
 }
 function genLevel(d){
-  depth=d; theme=THEMES[(d-1)%THEMES.length]; seen.fill(0);
-  floorH.fill(0); ceilH.fill(1); themeIdx=(d-1)%THEMES.length;
+  depth=d; theme=THEMES[Math.floor((d-1)/4)%THEMES.length]; seen.fill(0);
+  floorH.fill(0); ceilH.fill(1); themeIdx=Math.floor((d-1)/4)%THEMES.length; // Eviternity episodes: one theme per 4 floors
   rng=mulberry32(runSeed + d*7919);
   // Wolf3D: MAPSIZE 64 — maps are forced 64x64 (WL_GAME.C SetupGameLevel)
   mapW=WOLF.MAPSIZE; mapH=WOLF.MAPSIZE;
   grid=[]; for(let y=0;y<mapH;y++){ grid.push(new Array(mapW).fill(1)); }
-  doors=[]; pushwalls=[]; items=[];
-  // rooms
+  doors=[]; pushwalls=[]; items=[]; enemyShots=[];
+  // Eviternity scale: one grand hall per floor — carved FIRST so it
+  // always gets a spot (a huge arena, 2.5 ceiling, a platform, a pack).
+  let grandHall=null;
+  for(let tries=0; tries<60 && !grandHall; tries++){
+    const w=ri(14,20), h=ri(10,13), x=ri(1,mapW-w-1), y=ri(1,mapH-h-1);
+    grandHall={x,y,w,h,cx:x+(w>>1), cy:y+(h>>1)};
+    for(let yy=y;yy<y+h;yy++) for(let xx=x;xx<x+w;xx++) grid[yy][xx]=0;
+  }
+  // rooms (they avoid the grand hall)
   const rooms=[];
-  for(let tries=0; tries<300 && rooms.length<14; tries++){
-    const w=ri(4,10), h=ri(4,8), x=ri(1,mapW-w-1), y=ri(1,mapH-h-1);
+  for(let tries=0; tries<300 && rooms.length<16; tries++){
+    const w=ri(6,16), h=ri(6,12), x=ri(1,mapW-w-1), y=ri(1,mapH-h-1);
     let ok=true;
     for(const r of rooms) if(x<r.x+r.w+1 && x+w+1>r.x && y<r.y+r.h+1 && y+h+1>r.y){ ok=false; break; }
+    if(ok&&grandHall){ const r=grandHall; if(x<r.x+r.w+1 && x+w+1>r.x && y<r.y+r.h+1 && y+h+1>r.y) ok=false; }
     if(!ok) continue;
     rooms.push({x,y,w,h,cx:x+(w>>1), cy:y+(h>>1)});
     for(let yy=y;yy<y+h;yy++) for(let xx=x;xx<x+w;xx++) grid[yy][xx]=0;
   }
+  if(grandHall) rooms.push(grandHall); // last, so the spawn (rooms[0]) is a normal room
   function corridor(x0,y0,x1,y1){
     let x=x0,y=y0;
     while(x!==x1){ grid[y][x]=0; x+=Math.sign(x1-x); }
@@ -593,8 +636,7 @@ function genLevel(d){
   corridor(rooms[0].cx,rooms[0].cy,rooms[rooms.length-1].cx,rooms[rooms.length-1].cy);
   // wall types
   for(let y=0;y<mapH;y++) for(let x=0;x<mapW;x++) if(grid[y][x]===1){
-    grid[y][x]=1+((x*7+y*13+d)%4);
-    if(d>=5 && ((x*5+y*3)%9===0)) grid[y][x]=5;
+    grid[y][x]=theme.walls[(x*7+y*13+d)%theme.walls.length]; // OTEX: per-theme textures
   }
   // --- Wolf3D sliding doors (WL_ACT1.C, tiles 90-101, MAXDOORS 64) ---
   // A door sits in a 1-wide corridor gap: floor east+west with walls
@@ -672,9 +714,18 @@ function genLevel(d){
   }
   // boss floor: a dais just below the exit, where Hans stands
   if(d%3===0){ raiseRoomCeil(far); raiseRect(far.cx-1, far.cy+1, 3, 2); }
+  // the grand hall gets a 2.5 ceiling (epic scale) and a platform
+  if(grandHall){
+    for(let yy=grandHall.y;yy<grandHall.y+grandHall.h;yy++) for(let xx=grandHall.x;xx<grandHall.x+grandHall.w;xx++)
+      if(grid[yy][xx]===0) ceilH[yy*64+xx]=2.5;
+    raiseRect(grandHall.cx-2, grandHall.cy-1, 4, 3);
+  }
   enemies=[];
-  const nE=Math.min(10+d*3, 40);
-  const types = d===1?['guard','dog'] : d===2?['guard','dog','officer'] : d%3===0?['guard','officer','ss','mutant','dog'] : ['guard','dog','officer','ss','mutant'];
+  const nE=Math.min(12+d*4, 55); // Eviternity: bigger fights
+  const types = d===1?['guard','dog']
+    : d===2?['guard','dog','officer','nightmare']
+    : d<5?['guard','dog','officer','ss','mutant','nightmare']
+    : ['guard','dog','officer','ss','mutant','nightmare','astral']; // Astral Cacodemon from floor 5
   for(let i=0;i<nE;i++){
     const r=pick(rooms); if(r===rooms[0]) continue;
     const t=pick(types);
@@ -684,7 +735,20 @@ function genLevel(d){
     enemies.push({x:r.cx+rr(-1,1), y:r.cy+rr(-1,1), type:t, hp:base.hp*hpScale, maxHp:base.hp*hpScale, dmg:base.dmg*(1+(d-1)*0.08), speed:base.speed*rr(0.9,1.1), patrol:base.patrol, fire:0, wander:rr(0,6), ang:rr(0,6.28), flash:0, dead:false,
       state:'stand', stateTics:0, attackMode:false, reaction:0, ambush:rng()<0.25, dir:ri(0,3), shotsLeft:0});
   }
-  if(d%3===0){ const r=far; enemies.push({x:r.cx+0.5,y:r.cy+1.5,type:'boss',hp:ENEMY_TYPES.boss.hp,maxHp:ENEMY_TYPES.boss.hp,dmg:ENEMY_TYPES.boss.dmg,speed:1.3,patrol:0.55,fire:0,wander:0,ang:0,flash:0,dead:false,state:'stand',stateTics:0,attackMode:false,reaction:0,ambush:false,dir:0,shotsLeft:0}); }
+  // Eviternity: a pack in the grand hall (a set-piece fight)
+  if(grandHall){
+    const pack=Math.min(6, 2+d);
+    for(let i=0;i<pack;i++){
+      const t=pick(types), base=ENEMY_TYPES[t], hpScale=1+(d-1)*0.18;
+      enemies.push({x:grandHall.x+1+rr(0,grandHall.w-2), y:grandHall.y+1+rr(0,grandHall.h-2), type:t, hp:base.hp*hpScale, maxHp:base.hp*hpScale, dmg:base.dmg*(1+(d-1)*0.08), speed:base.speed*rr(0.9,1.1), patrol:base.patrol, fire:0, wander:rr(0,6), ang:rr(0,6.28), flash:0, dead:false, state:'stand', stateTics:0, attackMode:false, reaction:0, ambush:false, dir:ri(0,3), shotsLeft:0});
+    }
+  }
+  // boss floor: every 6th floor the Annihilator, otherwise Hans Grosse
+  if(d%3===0){
+    const r=far, isAnn=d%6===0, bt=isAnn?'annihilator':'boss', bb=ENEMY_TYPES[bt];
+    enemies.push({x:r.cx+0.5,y:r.cy+1.5,type:bt,hp:bb.hp,maxHp:bb.hp,dmg:bb.dmg,speed:bb.speed,patrol:bb.patrol,fire:0,wander:0,ang:0,flash:0,dead:false,state:'stand',stateTics:0,attackMode:false,reaction:0,ambush:false,dir:0,shotsLeft:0});
+    if(isAnn) log('THE ANNIHILATOR AWAKENS');
+  }
   // loot in rooms — Wolf3D GetBonus values: cross 100, chalice 500,
   // bible 1000, crown 5000; first aid +25, food +10, clip +8
   for(const r of rooms){
@@ -695,8 +759,8 @@ function genLevel(d){
   // gold key (bo_key1) — Hans drops it too; one is placed so the locked
   // door on this floor can be opened
   if(d>1){ const r=pick(rooms.slice(1)); items.push({x:r.cx+0.5,y:r.cy+0.5,kind:'key1'}); }
-  log('FLOOR '+d+' — '+theme.name+' — '+rooms.length+' rooms, '+enemies.length+' hostiles, '+doors.length+' doors. Seed '+(runSeed+d*7919));
-  if(audioUnlocked) startMusic(d%3===0?'boss':'combat'); // boss floors get the fast track
+  log('EPISODE '+theme.ep+' — '+theme.name+' — FLOOR '+d+' — '+rooms.length+' rooms, '+enemies.length+' hostiles, '+doors.length+' doors. Seed '+(runSeed+d*7919));
+  if(audioUnlocked) startMusic(d%3===0?'boss':theme.ep===4?'astral':'combat'); // boss floors get the fast track, Astral episode gets the astral track
 }
 function offerChoices(n){
   levelChoices=shuffle(UPGRADES.slice()).slice(0,n); choiceSel=0;
@@ -753,6 +817,7 @@ function castRay(angle, wantPath){
 // --- combat ---
 let shootCd=0, ctrlEdge=false, hurtBobT=-99; // hurtBobT: bobT when last hurt (HUD face grimace)
 let projectiles=[]; // player projectiles (rocket / plasma / BFG ball)
+let enemyShots=[]; // Eviternity: Astral Cacodemon + Annihilator fireballs
 let hookCd=0, hookT=0, hookTarget=null; // Doom Eternal meat hook
 // --- Doom Eternal Super Shotgun meat hook ---
 // F (gamepad X, HOOK button) with the Super Shotgun equipped: fires a
@@ -894,6 +959,16 @@ function tryShoot(){
     }
   }
 }
+// --- Eviternity: Astral Cacodemon / Annihilator hurl a spread of 3 fireballs ---
+function fireEnemyShot(e){
+  const base=Math.atan2(player.y-e.y, player.x-e.x);
+  const kind=e.type==='annihilator'?'eplasma':'efire';
+  for(const off of [-0.15, 0, 0.15]){
+    const a=base+off;
+    enemyShots.push({x:e.x+Math.cos(a)*0.5, y:e.y+Math.sin(a)*0.5, dx:Math.cos(a), dy:Math.sin(a), speed:6, dmg:e.dmg, kind, life:3});
+  }
+  sfx('shoot');
+}
 // --- Doom projectiles: move, wall/enemy hit, explode ---
 function updateProjectiles(dt){
   for(const pr of projectiles){
@@ -907,6 +982,14 @@ function updateProjectiles(dt){
     }
   }
   projectiles=projectiles.filter(pr=>!pr.dead);
+  // enemy fireballs: move, wall hit, player hit (they never hurt other enemies)
+  for(let i=enemyShots.length-1;i>=0;i--){
+    const sh=enemyShots[i];
+    sh.x+=sh.dx*sh.speed*dt; sh.y+=sh.dy*sh.speed*dt; sh.life-=dt;
+    const gx=Math.floor(sh.x), gy=Math.floor(sh.y);
+    if(sh.life<=0||gx<0||gy<0||gx>=mapW||gy>=mapH||(grid[gy]&&grid[gy][gx]>0)){ enemyShots.splice(i,1); continue; }
+    if(Math.hypot(sh.x-player.x,sh.y-player.y)<0.5){ hurtPlayer(sh.dmg, sh.kind==='eplasma'?'annihilator fire':'astral fire'); enemyShots.splice(i,1); }
+  }
 }
 function explodeProjectile(pr, direct){
   pr.dead=true; flash=0.15; shake=Math.max(shake,2); sfx('explosion');
@@ -985,13 +1068,13 @@ function hurtPlayer(dmg, from){
 }
 function saveBest(){
   try{
-    const b=JSON.parse(localStorage.getItem('qwertystein-best')||'{"depth":0,"score":0,"kills":0}');
+    const b=JSON.parse(localStorage.getItem('qwertyternity-best')||localStorage.getItem('qwertystein-best')||'{"depth":0,"score":0,"kills":0}');
     b.depth=Math.max(b.depth,depth); b.score=Math.max(b.score,player.score); b.kills=Math.max(b.kills,player.kills);
-    localStorage.setItem('qwertystein-best', JSON.stringify(b));
+    localStorage.setItem('qwertyternity-best', JSON.stringify(b));
   }catch(e){}
 }
 function best(){
-  try{ return JSON.parse(localStorage.getItem('qwertystein-best')||'{"depth":0,"score":0,"kills":0}'); }catch(e){ return {depth:0,score:0,kills:0}; }
+  try{ return JSON.parse(localStorage.getItem('qwertyternity-best')||localStorage.getItem('qwertystein-best')||'{"depth":0,"score":0,"kills":0}'); }catch(e){ return {depth:0,score:0,kills:0}; }
 }
 // --- drawn sprites: enemies as shaded 3D-style billboard figures,
 // guns as Doom-style viewmodel sprites (drawn once at load into
@@ -1037,6 +1120,58 @@ function drawEnemySprite(type){
     g.fillStyle=P.uniD; g.beginPath(); g.moveTo(62,56); g.lineTo(58,42); g.lineTo(68,54); g.fill(); // ear, laid back
     R(66,60,8,2,'#ff2222'); R(78,60,8,2,'#ff2222'); // red slit eyes
     R(12,78,16,4,P.uniD); // tail, raised
+    return c;
+  }
+  if(type==='nightmare'){
+    // Eviternity's Nightmare Demon: a shadowy, hunched demon — mostly
+    // darkness, glowing purple eyes (it flickers in and out of sight
+    // in the renderer, like the Spectre it is)
+    const gr=g.createLinearGradient(24,0,72,0); gr.addColorStop(0,'#2a0a2a'); gr.addColorStop(1,'#0a020a');
+    g.fillStyle=gr; g.fillRect(28,56,40,38); // hunched torso
+    OR(30,94,12,30,'#120412'); OR(54,94,12,30,'#120412'); // legs
+    OR(20,58,10,36,'#120412'); OR(66,58,10,36,'#120412'); // arms
+    g.fillStyle='#c8c8c8'; g.fillRect(20,92,2,8); g.fillRect(24,92,2,8); g.fillRect(74,92,2,8); g.fillRect(78,92,2,8); // claws
+    C(48,42,15,'#1a051a'); // dark skull
+    C(41,40,3,'#c040ff'); C(55,40,3,'#c040ff'); // glowing eyes
+    R(44,50,8,2,'#c040ff'); // glowing mouth slit
+    g.fillStyle='#2a0a2a'; g.beginPath(); g.moveTo(36,32); g.lineTo(32,16); g.lineTo(42,28); g.fill();
+    g.beginPath(); g.moveTo(60,32); g.lineTo(64,16); g.lineTo(54,28); g.fill(); // horns
+    return c;
+  }
+  if(type==='astral'){
+    // Eviternity's Astral Cacodemon: a floating red sphere, one eye,
+    // a huge toothed mouth, little horns (it floats — hover in render)
+    const gr=g.createRadialGradient(40,58,6,48,72,36); gr.addColorStop(0,'#ff7070'); gr.addColorStop(1,'#a02020');
+    g.fillStyle=gr; g.beginPath(); g.arc(48,72,34,0,6.29); g.fill(); // body
+    g.strokeStyle='#0a0a0a'; g.lineWidth=2; g.beginPath(); g.arc(48,72,34,0,6.29); g.stroke(); // outline
+    g.fillStyle='#d8d8d8'; g.beginPath(); g.moveTo(28,50); g.lineTo(24,30); g.lineTo(36,46); g.fill();
+    g.beginPath(); g.moveTo(68,50); g.lineTo(72,30); g.lineTo(60,46); g.fill(); // horns
+    C(48,54,7,'#ffffff'); C(48,54,3,'#ff0000'); C(48,54,1.5,'#000000'); // one eye
+    g.fillStyle='#1a0505'; g.beginPath(); g.ellipse(48,86,16,10,0,0,6.29); g.fill(); // huge mouth
+    g.fillStyle='#ffffff';
+    for(let tx=36;tx<=60;tx+=6) g.fillRect(tx,78,3,4); // top teeth
+    for(let tx=36;tx<=60;tx+=6) g.fillRect(tx,92,3,4); // bottom teeth
+    g.fillStyle='#a02020'; g.fillRect(12,72,8,14); g.fillRect(76,72,8,14); // little arms
+    return c;
+  }
+  if(type==='annihilator'){
+    // Eviternity's Annihilator: a bulkier, horned Baron — dark red,
+    // green glowing eyes, a fireball in its hand (it hurls hellfire)
+    OR(26,110,16,18,'#0a0a0a'); OR(54,110,16,18,'#0a0a0a'); // boots
+    OR(28,82,14,30,'#2a0a0a'); OR(54,82,14,30,'#2a0a0a'); // legs
+    const gr=g.createLinearGradient(20,0,76,0); gr.addColorStop(0,'#5a1a1a'); gr.addColorStop(1,'#2a0a0a');
+    g.fillStyle='#0a0a0a'; g.fillRect(19,43,58,42);
+    g.fillStyle=gr; g.fillRect(20,44,56,40); // bulky torso
+    OR(20,44,14,5,'#c8a84a'); OR(62,44,14,5,'#c8a84a'); // gold shoulder boards
+    OR(24,78,48,6,'#0a0a0a'); R(44,78,8,6,'#8a7a4a'); // belt + buckle
+    OR(12,46,10,38,'#2a0a0a'); OR(74,46,10,38,'#2a0a0a'); // arms
+    C(79,84,7,'#44ff44'); C(79,84,3,'#aaffaa'); // a green fireball in its hand
+    OR(34,16,28,28,'#5a1a1a'); // head
+    R(52,16,10,28,'rgba(0,0,0,0.3)');
+    g.fillStyle='#d8c8a0'; g.beginPath(); g.moveTo(34,22); g.lineTo(16,4); g.lineTo(24,28); g.lineTo(34,30); g.fill();
+    g.beginPath(); g.moveTo(62,22); g.lineTo(80,4); g.lineTo(72,28); g.lineTo(62,30); g.fill(); // huge curved horns
+    C(42,30,3,'#44ff44'); C(54,30,3,'#44ff44'); // green glowing eyes
+    R(42,38,12,2,'#0a0a0a'); // grim mouth
     return c;
   }
   // --- humanoid ---
@@ -1152,7 +1287,7 @@ function shadeLevels(cv){ // [bright, mid, dark] for distance shading
   return out;
 }
 const ENEMY_SPR={};
-for(const t of ['guard','officer','ss','dog','mutant','boss']) ENEMY_SPR[t]=shadeLevels(drawEnemySprite(t));
+for(const t of ['guard','officer','ss','dog','mutant','boss','nightmare','astral','annihilator']) ENEMY_SPR[t]=shadeLevels(drawEnemySprite(t));
 const GUN_SPR={};
 for(const w of WEAPONS) GUN_SPR[w.key]=drawGunSprite(w.key);
 const ITEM_COLOR={health:'#ff5555',ammo:'#ffd75e',gold:'#ffd75e',bomb:'#ff8844',exit:'#7ee081',key:'#ffd75e',cross:'#ffffff',chalice:'#ffd75e',bible:'#e8e8e8',crown:'#ffd75e',firstaid:'#ffffff',food:'#d8a878',clip:'#ffd75e',shells:'#ff8844',rockets:'#ff5555',cells:'#7ec8ff',key1:'#ffd75e'};
@@ -1389,21 +1524,28 @@ function update(dt){
       // chase through doors: open them (T_Chase waits on doors in Wolf3D)
       const gx=Math.floor(e.x+Math.cos(e.ang)*0.6), gy=Math.floor(e.y+Math.sin(e.ang)*0.6);
       const dr=doorAt(gx,gy); if(dr&&dr.action==='closed'&&dr.lock===0) dr.action='opening';
-      // Dog: T_DogChase -> bite within MINACTORDIST (WL_STATE.C T_Bite)
-      if(e.type==='dog'&&d<WOLF.MINACTORDIST+0.4&&e.fire<=0){
+      // Melee (dog / Nightmare Demon): T_DogChase -> bite within MINACTORDIST
+      if((e.type==='dog'||e.type==='nightmare')&&d<WOLF.MINACTORDIST+0.4&&e.fire<=0){
         e.fire=0.9;
-        if(rndT()<180){ hurtPlayer(WOLF.shootDamage(1), 'dog bite'); log('Dog bites!'); }
-        else log('Dog snaps and misses');
+        const nm=e.type==='nightmare'?'Nightmare Demon':'Dog';
+        if(rndT()<180){ hurtPlayer(e.type==='nightmare'?e.dmg:WOLF.shootDamage(1), nm.toLowerCase()+' bite'); log(nm+' bites!'); }
+        else log(nm+' snaps and misses');
       }
       continue;
     }
     if(e.state==='shoot'){
-      // T_Shoot: hit chance by distance + running/walking, damage table
+      // Eviternity: Astral Cacodemon / Annihilator hurl fireballs; others hitscan
       if(e.stateTics<=0){
-        const running=keys['ShiftLeft']||keys['ShiftRight'];
-        const hc=WOLF.shootHitChance(d, running, seen);
-        if(seen && rndT()<hc){ hurtPlayer(WOLF.shootDamage(d), e.type); }
-        else if(seen) log(e.type.toUpperCase()+' missed');
+        if(e.type==='astral'||e.type==='annihilator'){
+          fireEnemyShot(e);
+          log(e.type==='astral'?'Astral Cacodemon spits fire!':'The Annihilator hurls hellfire!');
+        } else {
+          // T_Shoot: hit chance by distance + running/walking, damage table
+          const running=keys['ShiftLeft']||keys['ShiftRight'];
+          const hc=WOLF.shootHitChance(d, running, seen);
+          if(seen && rndT()<hc){ hurtPlayer(WOLF.shootDamage(d), e.type); }
+          else if(seen) log(e.type.toUpperCase()+' missed');
+        }
         e.shotsLeft--;
         if(e.shotsLeft>0){ e.stateTics=10; } // SS 4 shots, mutant 2 per volley
         else { e.state='chase'; e.fire=base.fire*rr(0.8,1.3); }
@@ -1580,8 +1722,9 @@ function render(){
   // z-buffer clipping against the walls
   const sprs=[];
   for(const it of items) if(!it.taken&&ITEM_SPR[it.kind]) sprs.push({x:it.x,y:it.y,cv:ITEM_SPR[it.kind],scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
-  for(const e of enemies) if(!e.dead) sprs.push({x:e.x,y:e.y,cv:ENEMY_SPR[e.type]||ENEMY_SPR.guard,scale:e.type==='boss'?1.6:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e),stag:e.staggered,flash:e.flash});
+  for(const e of enemies) if(!e.dead) sprs.push({x:e.x,y:e.y,cv:ENEMY_SPR[e.type]||ENEMY_SPR.guard,scale:(e.type==='boss'||e.type==='annihilator')?1.6:e.type==='astral'?1.2:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e),stag:e.staggered,flash:e.flash,hover:ENEMY_TYPES[e.type].hover||0,flick:e.type==='nightmare'});
   for(const pr of projectiles) sprs.push({x:pr.x,y:pr.y,proj:pr.kind,scale:0.5,dist:Math.hypot(pr.x-player.x,pr.y-player.y)});
+  for(const sh of enemyShots) sprs.push({x:sh.x,y:sh.y,proj:sh.kind,scale:0.5,dist:Math.hypot(sh.x-player.x,sh.y-player.y)});
   sprs.sort((a,b)=>b.dist-a.dist);
   for(const s of sprs){
     const dx=s.x-player.x, dy=s.y-player.y, d=s.dist;
@@ -1591,16 +1734,17 @@ function render(){
     const sx=SW/2 + Math.tan(da)*projDist;
     const h=projDist/d*s.scale, w=h*0.7;
     const sFH=floorH[Math.floor(s.y)*64+Math.floor(s.x)]||0; // stands on its own floor
-    const bot=horizon+(eyeZ-sFH)*projDist/d, top=bot-h;
+    const bot=horizon+(eyeZ-sFH-(s.hover||0))*projDist/d, top=bot-h; // hover: Astral Cacodemon floats
     if(s.proj){
       const r=Math.max(2, h*0.12);
-      sctx.fillStyle=s.proj==='rocket'?'#ff8844':s.proj==='plasma'?'#66ccff':'#44ff66';
+      sctx.fillStyle=s.proj==='rocket'?'#ff8844':s.proj==='plasma'?'#66ccff':s.proj==='efire'?'#ff6622':s.proj==='eplasma'?'#44ff44':'#44ff66';
       sctx.beginPath(); sctx.arc(sx, bot-h*0.5, r, 0, 6.29); sctx.fill();
       sctx.fillStyle='#ffffff'; sctx.beginPath(); sctx.arc(sx, bot-h*0.5, r*0.45, 0, 6.29); sctx.fill();
       continue;
     }
     const level=s.flash>0?0:(d<4?0:d<9?1:2);
     const img=s.cv[level];
+    if(s.flick) sctx.globalAlpha=0.15+0.75*Math.abs(Math.sin(Date.now()/130+s.x*3+s.y*5)); // Nightmare Demon: flickers, mostly nearly invisible
     if(s.stag){
       sctx.fillStyle='rgba(255,215,94,0.25)';
       sctx.beginPath(); sctx.arc(sx, bot-h/2, w*0.6, 0, 6.29); sctx.fill();
@@ -1621,6 +1765,7 @@ function render(){
       sctx.fillStyle='#222'; sctx.fillRect(bx,by,bw,4);
       sctx.fillStyle='#ff6060'; sctx.fillRect(bx,by,bw*s.hp,4);
     }
+    sctx.globalAlpha=1; // restore after a flickering Nightmare Demon
   }
   // meat-hook chain: dots from screen centre to the latched enemy
   if(hookT>0&&hookTarget&&!hookTarget.dead){
@@ -1769,15 +1914,15 @@ function overlayText(s,c){
 }
 function overlayTitle(){
   const lines=[
-    "  _____        _______ ____ _______   ______ _____ _____ ___ _   _ ",
-    " / _ \\ \\      / / ____|  _ \\_   _\\ \\ / / ___|_   _| ____|_ _| \\ | |",
-    "| | | \\ \\ /\\ / /|  _| | |_) || |  \\ V /\\___ \\ | | |  _|  | ||  \\| |",
-    "| |_| |\\ V  V / | |___|  _ < | |   | |  ___) || | | |___ | || |\\  |",
-    " \\__\\_\\ \\_/\\_/  |_____|_| \\_\\|_|   |_| |____/ |_| |_____|___|_| \\_|",
+    "  _____        _______ ____ _______   _______ _____ ____  _   _ ___ _____",
+    " / _ \\ \\      / / ____|  _ \\_   _\\ \\ / /_   _| ____|  _ \\| \\ | |_ _|_   _|",
+    "| | | \\ \\ /\\ / /|  _| | |_) || |  \\ V /  | | |  _| | |_) |  \\| || |  | |",
+    "| |_| |\\ V  V / | |___|  _ < | |   | |   | | | |___|  _ <| |\\  || |  | |",
+    " \\__\\_\\ \\_/\\_/  |_____|_| \\_\\|_|   |_|   |_| |_____|_| \\_\\_| \\_|___| |_|",
 
     '',
-    'A WOLFENSTEIN-STYLE RAYCASTER IN DENSE ASCII ART',
-    'Procedural floors. Roguelike runs. Permadeath. No mercy.',
+    'AN EVITERNITY-STYLE RAYCASTER — DOOM, BUT BIGGER',
+    'Eviternity-scale floors. Roguelike runs. Permadeath. No mercy.',
     '',
     'WASD move — mouse look — click / Ctrl shoot — 1-8 Doom weapons',
     'Space / J jump — Q dash — T bomb — F meat hook — Shift run — P pause',
