@@ -516,12 +516,19 @@ const ENEMY_TYPES={
  guard:  {hp:25, dmg:7,  speed:1.1, patrol:0.55, chaseMul:3, range:7, xp:10, score:100, color:'#c8c8c8', spr:'guard',   fire:1.6, reaction:4, name:'KNIGHT'},
  dog:    {hp:1,  dmg:6,  speed:2.3, patrol:1.5,  chaseMul:2, range:1.4, xp:12, score:200, color:'#c09050', spr:'dog',   fire:0.9, reaction:8, melee:true, name:'LION'},
  nightmare:{hp:40, dmg:14, speed:2.6, patrol:1.2, chaseMul:2, range:1.6, xp:25, score:600, color:'#1a7a6a', spr:'nightmare', fire:0.9, reaction:6, melee:true},
- astral:  {hp:120,dmg:10, speed:0.9, patrol:0.4,  chaseMul:2, range:10, xp:50, score:1000,color:'#8a8a8a', spr:'astral', fire:2.2, reaction:4, shots:1, hover:0.35},
- annihilator:{hp:1200,dmg:22,speed:1.2,patrol:0.4, chaseMul:3, range:10, xp:200,score:8000,color:'#c04040', spr:'annihilator', fire:1.6, reaction:1, shots:1, name:'ANNIHILATOR'},
+ astral:  {hp:120,dmg:10, speed:0.9, patrol:0.4,  chaseMul:2, range:10, xp:50, score:1000,color:'#8a8a8a', spr:'astral', fire:2.2, reaction:4, shots:1, proj:'spread', hover:0.35},
+ annihilator:{hp:1200,dmg:22,speed:1.2,patrol:0.4, chaseMul:3, range:10, xp:200,score:8000,color:'#c04040', spr:'annihilator', fire:1.6, reaction:1, shots:1, proj:'plasma', name:'ANNIHILATOR'},
  officer:{hp:50, dmg:12, speed:1.5, patrol:0.55, chaseMul:5, range:8, xp:20, score:400, color:'#c8a84a', spr:'officer', fire:1.3, reaction:2, name:'KNIGHT CAPTAIN'},
  ss:     {hp:100,dmg:14, speed:1.4, patrol:0.55, chaseMul:4, range:8, xp:35, score:500, color:'#2a2a2a', spr:'ss',      fire:1.1, reaction:6, shots:4, name:'DARK KNIGHT'},
  mutant: {hp:55, dmg:16, speed:1.0, patrol:0.55, chaseMul:3, range:6, xp:30, score:700, color:'#6a8a3a', spr:'mutant', fire:1.8, reaction:6, shots:2, name:'HEDGE KNIGHT'},
  boss:   {hp:850,dmg:20, speed:1.3, patrol:0.55, chaseMul:3, range:9, xp:100,score:5000,color:'#ffd75e', spr:'boss',   fire:1.1, reaction:1, name:'THE KNIGHT LORD'},
+ // --- Doom Eternal monsters (the Eternal variants of the classics) ---
+ imp:    {hp:30, dmg:8,  speed:2.0, patrol:1.0,  chaseMul:2, range:9, xp:15, score:300, color:'#8a5a3a', spr:'imp',    fire:1.8, reaction:5, shots:1, proj:'fire',   name:'IMP'},
+ pinky:  {hp:80, dmg:12, speed:2.0, patrol:1.0,  chaseMul:2, range:1.6, xp:30, score:500, color:'#c06080', spr:'pinky', fire:0.9, reaction:6, melee:true, name:'PINKY'},
+ mancubus:{hp:300,dmg:12, speed:0.7, patrol:0.4, chaseMul:2, range:10, xp:60, score:1200,color:'#c08040', spr:'mancubus', fire:2.4, reaction:5, shots:1, proj:'spread', name:'MANCUBUS'},
+ hellknight:{hp:200,dmg:16,speed:1.4, patrol:0.5, chaseMul:3, range:9, xp:60, score:1500,color:'#8a6a3a', spr:'hellknight', fire:2.0, reaction:4, shots:1, proj:'fire', name:'HELL KNIGHT'},
+ revenant:{hp:150,dmg:14, speed:1.3, patrol:0.5, chaseMul:2, range:10, xp:55, score:1300,color:'#d8d8c8', spr:'revenant', fire:2.0, reaction:5, shots:1, proj:'rocket', name:'REVENANT'},
+ cyberdemon:{hp:2000,dmg:25,speed:1.0,patrol:0.4, chaseMul:3, range:12, xp:300,score:15000,color:'#8a8a8a', spr:'cyberdemon', fire:1.8, reaction:1, shots:1, proj:'rocket', name:'CYBERDEMON'},
 };
 // --- roguelike upgrades (offered 3 at a time on level-up and floor clear) ---
 const UPGRADES=[
@@ -925,9 +932,10 @@ function genLevel(d){
   enemies=[];
   const nE=Math.min(12+d*4, 55); // Eviternity: bigger fights
   const types = d===1?['guard','dog']
-    : d===2?['guard','dog','officer','nightmare']
-    : d<5?['guard','dog','officer','ss','mutant','nightmare']
-    : ['guard','dog','officer','ss','mutant','nightmare','astral']; // Astral Cacodemon from floor 5
+    : d===2?['guard','dog','officer','nightmare','imp'] // Imp from floor 2
+    : d===3?['guard','dog','officer','ss','mutant','nightmare','imp','pinky'] // Pinky from floor 3
+    : d===4?['guard','dog','officer','ss','mutant','nightmare','imp','pinky','mancubus','hellknight'] // Mancubus + Hell Knight from floor 4
+    : ['guard','dog','officer','ss','mutant','nightmare','imp','pinky','mancubus','hellknight','astral','revenant']; // Astral Cacodemon + Revenant from floor 5
   for(let i=0;i<nE;i++){
     const r=pick(rooms); if(r===rooms[0]) continue;
     const t=pick(types);
@@ -945,11 +953,13 @@ function genLevel(d){
       enemies.push({x:grandHall.x+1+rr(0,grandHall.w-2), y:grandHall.y+1+rr(0,grandHall.h-2), type:t, hp:base.hp*hpScale, maxHp:base.hp*hpScale, dmg:base.dmg*(1+(d-1)*0.08), speed:base.speed*rr(0.9,1.1), patrol:base.patrol, fire:0, wander:rr(0,6), ang:rr(0,6.28), flash:0, dead:false, state:'stand', stateTics:0, attackMode:false, reaction:0, ambush:false, dir:ri(0,3), shotsLeft:0});
     }
   }
-  // boss floor: every 6th floor the Annihilator, otherwise Hans Grosse
+  // boss floor: every 9th floor the Cyberdemon, every 6th the Annihilator,
+  // otherwise the Knight Lord
   if(d%3===0){
-    const r=far, isAnn=d%6===0, bt=isAnn?'annihilator':'boss', bb=ENEMY_TYPES[bt];
+    const r=far, isCyber=d%9===0, isAnn=!isCyber&&d%6===0, bt=isCyber?'cyberdemon':isAnn?'annihilator':'boss', bb=ENEMY_TYPES[bt];
     enemies.push({x:r.cx+0.5,y:r.cy+1.5,type:bt,hp:bb.hp,maxHp:bb.hp,dmg:bb.dmg,speed:bb.speed,patrol:bb.patrol,fire:0,wander:0,ang:0,flash:0,dead:false,state:'stand',stateTics:0,attackMode:false,reaction:0,ambush:false,dir:0,shotsLeft:0});
-    if(isAnn) log('THE ANNIHILATOR AWAKENS');
+    if(isCyber) log('THE CYBERDEMON AWAKENS');
+    else if(isAnn) log('THE ANNIHILATOR AWAKENS');
   }
   // loot in rooms — Wolf3D GetBonus values: cross 100, chalice 500,
   // bible 1000, crown 5000; first aid +25, food +10, clip +8
@@ -1194,8 +1204,10 @@ function tryShoot(){
 // --- Eviternity: Astral Cacodemon / Annihilator hurl a spread of 3 fireballs ---
 function fireEnemyShot(e){
   const base=Math.atan2(player.y-e.y, player.x-e.x);
-  const kind=e.type==='annihilator'?'eplasma':'efire';
-  for(const off of [-0.15, 0, 0.15]){
+  const proj=ENEMY_TYPES[e.type].proj||'fire';
+  const kind=proj==='plasma'?'eplasma':proj==='rocket'?'erocket':'efire';
+  const offs=proj==='spread'||proj==='plasma'?[-0.15, 0, 0.15]:[0];
+  for(const off of offs){
     const a=base+off;
     enemyShots.push({x:e.x+Math.cos(a)*0.5, y:e.y+Math.sin(a)*0.5, dx:Math.cos(a), dy:Math.sin(a), speed:6, dmg:e.dmg, kind, life:3});
   }
@@ -1220,7 +1232,7 @@ function updateProjectiles(dt){
     sh.x+=sh.dx*sh.speed*dt; sh.y+=sh.dy*sh.speed*dt; sh.life-=dt;
     const gx=Math.floor(sh.x), gy=Math.floor(sh.y);
     if(sh.life<=0||gx<0||gy<0||gx>=mapW||gy>=mapH||(grid[gy]&&grid[gy][gx]>0)){ enemyShots.splice(i,1); continue; }
-    if(Math.hypot(sh.x-player.x,sh.y-player.y)<0.5){ hurtPlayer(sh.dmg, sh.kind==='eplasma'?'annihilator fire':'astral fire'); enemyShots.splice(i,1); }
+    if(Math.hypot(sh.x-player.x,sh.y-player.y)<0.5){ hurtPlayer(sh.dmg, sh.kind==='eplasma'?'annihilator fire':sh.kind==='erocket'?'enemy rocket':'demon fire'); enemyShots.splice(i,1); }
   }
 }
 function explodeProjectile(pr, direct){
@@ -1441,6 +1453,125 @@ function drawEnemySprite(type){
     R(42,38,12,2,'#0a0a0a'); // grim mouth
     return c;
   }
+  if(type==='imp'){
+    // Doom Eternal's Imp: a small, hunched brown demon, spikes down its
+    // back, glowing yellow eyes, little horns — fast, and it throws
+    // fireballs. One dominant brown, a dark outline.
+    const gr=g.createLinearGradient(28,0,68,0); gr.addColorStop(0,'#8a5a3a'); gr.addColorStop(1,'#4a2a1a');
+    g.fillStyle=gr; g.fillRect(30,58,36,36); // hunched torso
+    OR(32,94,10,30,'#3a2010'); OR(54,94,10,30,'#3a2010'); // legs
+    OR(22,60,10,34,'#3a2010'); OR(64,60,10,34,'#3a2010'); // arms
+    g.fillStyle='#e8e8e8'; g.fillRect(22,92,2,6); g.fillRect(26,92,2,6); g.fillRect(72,92,2,6); g.fillRect(76,92,2,6); // claws
+    C(48,44,14,'#6a3a22'); // head
+    C(42,42,3,'#ffdd22'); C(54,42,3,'#ffdd22'); // glowing yellow eyes
+    R(44,50,8,2,'#1a0a05'); // mouth slit
+    g.fillStyle='#3a2010'; g.beginPath(); g.moveTo(38,34); g.lineTo(34,20); g.lineTo(44,30); g.fill();
+    g.beginPath(); g.moveTo(58,34); g.lineTo(62,20); g.lineTo(52,30); g.fill(); // little horns
+    g.fillStyle='#c8b060'; // the spikes down its back
+    for(let sy=60;sy<=86;sy+=8){ g.beginPath(); g.moveTo(30,sy); g.lineTo(22,sy+4); g.lineTo(30,sy+8); g.fill(); }
+    return c;
+  }
+  if(type==='pinky'){
+    // Doom Eternal's Pinky: a bulky pink demon, a huge mouth full of
+    // teeth, tiny eyes, small horns — the classic melee demon, tougher
+    // than the lion. One dominant pink, a dark outline.
+    const gr=g.createLinearGradient(20,0,76,0); gr.addColorStop(0,'#d07090'); gr.addColorStop(1,'#802040');
+    g.fillStyle=gr; g.beginPath(); g.ellipse(48,86,28,26,0,0,6.29); g.fill(); // bulky body
+    g.strokeStyle='#0a0a0a'; g.lineWidth=2; g.beginPath(); g.ellipse(48,86,28,26,0,0,6.29); g.stroke(); // outline
+    OR(28,108,12,16,'#802040'); OR(56,108,12,16,'#802040'); // legs
+    OR(18,70,10,30,'#802040'); OR(68,70,10,30,'#802040'); // arms
+    C(48,42,16,'#c06080'); // head
+    C(40,38,3,'#ffd75e'); C(56,38,3,'#ffd75e'); // tiny glowing eyes
+    g.fillStyle='#1a0505'; g.beginPath(); g.ellipse(48,50,12,7,0,0,6.29); g.fill(); // the huge mouth
+    g.fillStyle='#ffffff';
+    for(let tx=38;tx<=58;tx+=5) g.fillRect(tx,44,3,4); // top teeth
+    for(let tx=38;tx<=58;tx+=5) g.fillRect(tx,54,3,4); // bottom teeth
+    g.fillStyle='#802040'; g.beginPath(); g.moveTo(36,30); g.lineTo(32,16); g.lineTo(42,26); g.fill();
+    g.beginPath(); g.moveTo(60,30); g.lineTo(64,16); g.lineTo(54,26); g.fill(); // horns
+    g.fillStyle='rgba(0,0,0,0.35)'; g.fillRect(20,80,56,4); // belly shadow
+    return c;
+  }
+  if(type==='mancubus'){
+    // Doom Eternal's Mancubus: a huge, fat orange-tan demon with a
+    // flamethrower on each arm — slow, tanky, and it hurls a spread of
+    // fireballs. One dominant orange-tan, a dark outline.
+    const gr=g.createLinearGradient(16,0,80,0); gr.addColorStop(0,'#d09050'); gr.addColorStop(1,'#7a4a20');
+    g.fillStyle=gr; g.beginPath(); g.ellipse(48,84,32,32,0,0,6.29); g.fill(); // the fat belly
+    g.strokeStyle='#0a0a0a'; g.lineWidth=2; g.beginPath(); g.ellipse(48,84,32,32,0,0,6.29); g.stroke(); // outline
+    OR(28,112,12,12,'#5a3a1a'); OR(56,112,12,12,'#5a3a1a'); // little legs
+    // the arm cannons: two big metal tubes, one on each arm
+    OR(8,60,14,36,'#3a3a3a'); OR(74,60,14,36,'#3a3a3a');
+    C(15,58,8,'#2a2a2a'); C(81,58,8,'#2a2a2a'); // muzzles
+    C(15,58,4,'#ff6622'); C(81,58,4,'#ff6622'); // glowing bores
+    C(48,40,13,'#c08040'); // small head
+    C(42,38,3,'#ffdd22'); C(54,38,3,'#ffdd22'); // glowing yellow eyes
+    R(44,46,8,2,'#1a0a05'); // mouth slit
+    g.fillStyle='#7a4a20'; g.beginPath(); g.moveTo(38,30); g.lineTo(34,18); g.lineTo(44,26); g.fill();
+    g.beginPath(); g.moveTo(58,30); g.lineTo(62,18); g.lineTo(52,26); g.fill(); // horns
+    g.fillStyle='rgba(0,0,0,0.3)'; g.fillRect(24,96,48,6); // belly shadow
+    return c;
+  }
+  if(type==='hellknight'){
+    // Doom Eternal's Hell Knight: a big, muscular demon, dark green-gold
+    // skin, huge curled horns, glowing green eyes — a heavy that throws
+    // fireballs. One dominant green-gold, a dark outline.
+    const gr=g.createLinearGradient(24,0,72,0); gr.addColorStop(0,'#8a7a3a'); gr.addColorStop(1,'#3a2a10');
+    g.fillStyle=gr; g.fillRect(28,56,40,38); // muscular torso
+    g.fillStyle='#0a0a0a'; g.fillRect(28,56,40,2); // dark top line
+    OR(30,94,12,30,'#2a1a08'); OR(54,94,12,30,'#2a1a08'); // legs
+    OR(18,58,12,38,'#2a1a08'); OR(66,58,12,38,'#2a1a08'); // arms
+    g.fillStyle='#e8e8e8'; g.fillRect(18,94,3,8); g.fillRect(23,94,3,8); g.fillRect(75,94,3,8); g.fillRect(80,94,3,8); // claws
+    C(48,42,15,'#6a5a2a'); // head
+    C(41,40,3,'#44ff44'); C(55,40,3,'#44ff44'); // glowing green eyes
+    R(44,50,8,2,'#1a0a05'); // mouth slit
+    g.fillStyle='#3a2a10'; // the big curled horns
+    g.beginPath(); g.moveTo(34,32); g.quadraticCurveTo(20,20,28,8); g.lineTo(34,16); g.quadraticCurveTo(28,24,38,30); g.fill();
+    g.beginPath(); g.moveTo(62,32); g.quadraticCurveTo(76,20,68,8); g.lineTo(62,16); g.quadraticCurveTo(68,24,58,30); g.fill();
+    R(28,56,40,3,'rgba(255,255,255,0.2)'); // top highlight on the muscle
+    return c;
+  }
+  if(type==='revenant'){
+    // Doom Eternal's Revenant: a tall, skeletal demon, pale bone, a
+    // rocket launcher on each shoulder, glowing red eyes — it fires
+    // rockets. One dominant pale bone, a dark outline.
+    const gr=g.createLinearGradient(30,0,66,0); gr.addColorStop(0,'#d8d8c8'); gr.addColorStop(1,'#8a8a7a');
+    g.fillStyle=gr; g.fillRect(34,56,28,38); // skeletal torso
+    g.fillStyle='#0a0a0a'; for(let ry=62;ry<90;ry+=6) g.fillRect(36,ry,24,2); // ribs
+    OR(36,94,10,30,'#8a8a7a'); OR(50,94,10,30,'#8a8a7a'); // legs
+    OR(24,58,10,36,'#8a8a7a'); OR(62,58,10,36,'#8a8a7a'); // arms
+    // the shoulder rocket launchers
+    OR(14,44,16,12,'#3a3a3a'); OR(66,44,16,12,'#3a3a3a');
+    C(22,44,4,'#2a2a2a'); C(74,44,4,'#2a2a2a'); // tubes
+    C(22,44,2,'#ff4422'); C(74,44,2,'#ff4422'); // glowing bores
+    C(48,40,13,'#e8e8d8'); // skull
+    C(42,38,3,'#ff2222'); C(54,38,3,'#ff2222'); // glowing red eyes
+    R(44,48,8,3,'#0a0a0a'); // teeth slit
+    g.fillStyle='#8a8a7a'; g.beginPath(); g.moveTo(38,30); g.lineTo(34,18); g.lineTo(44,26); g.fill();
+    g.beginPath(); g.moveTo(58,30); g.lineTo(62,18); g.lineTo(52,26); g.fill(); // horns
+    return c;
+  }
+  if(type==='cyberdemon'){
+    // Doom Eternal's Cyberdemon: a huge, grey-brown demon, cybernetic —
+    // a rocket launcher for one arm, a metal jaw, glowing red eyes, big
+    // horns. The ultimate boss. One dominant grey-brown, a dark outline.
+    const gr=g.createLinearGradient(16,0,80,0); gr.addColorStop(0,'#9a8a7a'); gr.addColorStop(1,'#4a3a2a');
+    g.fillStyle=gr; g.fillRect(24,56,48,40); // massive torso
+    g.fillStyle='#0a0a0a'; g.fillRect(24,56,48,2); // dark top line
+    OR(28,96,14,28,'#3a2a1a'); OR(54,96,14,28,'#3a2a1a'); // legs
+    OR(14,58,12,38,'#3a2a1a'); // left arm
+    // right arm is cybernetic: a metal rocket launcher
+    OR(70,58,14,38,'#3a3a3a'); R(72,58,10,4,'#8a8a8a');
+    C(77,96,7,'#2a2a2a'); C(77,96,3,'#ff4422'); // the rocket tube
+    C(48,40,16,'#7a6a5a'); // head
+    C(41,38,4,'#ff2222'); C(55,38,4,'#ff2222'); // glowing red eyes
+    R(42,48,12,3,'#0a0a0a'); // metal jaw slit
+    g.fillStyle='#8a8a8a'; g.fillRect(42,52,12,3); // metal jaw plate
+    g.fillStyle='#4a3a2a'; // the big horns
+    g.beginPath(); g.moveTo(34,30); g.quadraticCurveTo(18,16,28,4); g.lineTo(36,12); g.quadraticCurveTo(28,22,40,28); g.fill();
+    g.beginPath(); g.moveTo(62,30); g.quadraticCurveTo(78,16,68,4); g.lineTo(60,12); g.quadraticCurveTo(68,22,56,28); g.fill();
+    R(24,56,48,3,'rgba(255,255,255,0.25)'); // hard top highlight
+    return c;
+  }
   // --- knight: plate armour, a great helm, a crossbow ---
   // (all human enemies are knights now; the crossbow is the ranged
   // weapon — mechanically the same hitscan as the old rifle)
@@ -1572,7 +1703,7 @@ function shadeLevels(cv){ // [bright, mid, dark] for distance shading
   return out;
 }
 const ENEMY_SPR={};
-for(const t of ['guard','officer','ss','dog','mutant','boss','nightmare','astral','annihilator']) ENEMY_SPR[t]=shadeLevels(drawEnemySprite(t));
+for(const t of ['guard','officer','ss','dog','mutant','boss','nightmare','astral','annihilator','imp','pinky','mancubus','hellknight','revenant','cyberdemon']) ENEMY_SPR[t]=shadeLevels(drawEnemySprite(t));
 const GUN_SPR={};
 for(const w of WEAPONS) GUN_SPR[w.key]=drawGunSprite(w.key);
 const ITEM_COLOR={health:'#5a8aff',ammo:'#ffd75e',gold:'#ffd75e',bomb:'#ff8844',exit:'#7ee081',key:'#ffd75e',cross:'#ffffff',chalice:'#ffd75e',bible:'#e8e8e8',crown:'#ffd75e',firstaid:'#ffffff',food:'#d8a878',clip:'#ffd75e',shells:'#ff5555',rockets:'#ff8844',cells:'#7ec8ff',key1:'#ffd75e'};
@@ -1809,21 +1940,21 @@ function update(dt){
       // chase through doors: open them (T_Chase waits on doors in Wolf3D)
       const gx=Math.floor(e.x+Math.cos(e.ang)*0.6), gy=Math.floor(e.y+Math.sin(e.ang)*0.6);
       const dr=doorAt(gx,gy); if(dr&&dr.action==='closed'&&dr.lock===0) dr.action='opening';
-      // Melee (lion / Nightmare Demon): T_DogChase -> bite within MINACTORDIST
-      if((e.type==='dog'||e.type==='nightmare')&&d<WOLF.MINACTORDIST+0.4&&e.fire<=0){
+      // Melee (lion / Nightmare Demon / Pinky): T_DogChase -> bite within MINACTORDIST
+      if((e.type==='dog'||e.type==='nightmare'||e.type==='pinky')&&d<WOLF.MINACTORDIST+0.4&&e.fire<=0){
         e.fire=0.9;
-        const nm=e.type==='nightmare'?'Nightmare Demon':'Lion';
-        if(rndT()<180){ hurtPlayer(e.type==='nightmare'?e.dmg:WOLF.shootDamage(1), nm.toLowerCase()+' bite'); log(nm+' bites!'); }
+        const nm=e.type==='nightmare'?'Nightmare Demon':e.type==='pinky'?'Pinky':'Lion';
+        if(rndT()<180){ hurtPlayer(e.type==='nightmare'||e.type==='pinky'?e.dmg:WOLF.shootDamage(1), nm.toLowerCase()+' bite'); log(nm+' bites!'); }
         else log(nm+' snaps and misses');
       }
       continue;
     }
     if(e.state==='shoot'){
-      // Eviternity: Astral Cacodemon / Annihilator hurl fireballs; others hitscan
+      // Doom Eternal: types with a proj field hurl a projectile; others hitscan
       if(e.stateTics<=0){
-        if(e.type==='astral'||e.type==='annihilator'){
+        if(ENEMY_TYPES[e.type].proj){
           fireEnemyShot(e);
-          log(e.type==='astral'?'Astral Cacodemon spits fire!':'The Annihilator hurls hellfire!');
+          log((ENEMY_TYPES[e.type].name||e.type.toUpperCase())+(e.type==='revenant'||e.type==='cyberdemon'?' fires a rocket!':' spits fire!'));
         } else {
           // T_Shoot: hit chance by distance + running/walking, damage table
           const running=keys['ShiftLeft']||keys['ShiftRight'];
@@ -2037,7 +2168,7 @@ function render(){
   const sprs=[];
   for(const it of items) if(!it.taken&&ITEM_SPR[it.kind]) sprs.push({x:it.x,y:it.y,cv:ITEM_SPR[it.kind],scale:0.7,dist:Math.hypot(it.x-player.x,it.y-player.y)});
   for(const dc of decor) sprs.push({x:dc.x,y:dc.y,cv:DECOR_SPR[dc.kind],scale:dc.scale||1,dist:Math.hypot(dc.x-player.x,dc.y-player.y)});
-  for(const e of enemies) if(!e.dead) sprs.push({x:e.x,y:e.y,cv:ENEMY_SPR[e.type]||ENEMY_SPR.guard,scale:(e.type==='boss'||e.type==='annihilator')?1.6:e.type==='astral'?1.2:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e),stag:e.staggered,flash:e.flash,hover:ENEMY_TYPES[e.type].hover||0,flick:e.type==='nightmare'});
+  for(const e of enemies) if(!e.dead) sprs.push({x:e.x,y:e.y,cv:ENEMY_SPR[e.type]||ENEMY_SPR.guard,scale:e.type==='cyberdemon'?2.0:(e.type==='boss'||e.type==='annihilator')?1.6:e.type==='mancubus'?1.4:e.type==='hellknight'?1.3:e.type==='astral'?1.2:1,dist:Math.hypot(e.x-player.x,e.y-player.y),hp:e.hp/maxHpSafe(e),stag:e.staggered,flash:e.flash,hover:ENEMY_TYPES[e.type].hover||0,flick:e.type==='nightmare'});
   for(const pr of projectiles) sprs.push({x:pr.x,y:pr.y,proj:pr.kind,scale:0.5,dist:Math.hypot(pr.x-player.x,pr.y-player.y)});
   for(const sh of enemyShots) sprs.push({x:sh.x,y:sh.y,proj:sh.kind,scale:0.5,dist:Math.hypot(sh.x-player.x,sh.y-player.y)});
   sprs.sort((a,b)=>b.dist-a.dist);
@@ -2052,7 +2183,7 @@ function render(){
     const bot=horizon+(eyeZ-sFH-(s.hover||0))*projDist/d, top=bot-h; // hover: Astral Cacodemon floats
     if(s.proj){
       const r=Math.max(2, h*0.12);
-      sctx.fillStyle=s.proj==='rocket'?'#ff8844':s.proj==='plasma'?'#66ccff':s.proj==='efire'?'#ff6622':s.proj==='eplasma'?'#44ff44':'#44ff66';
+      sctx.fillStyle=s.proj==='rocket'?'#ff8844':s.proj==='plasma'?'#66ccff':s.proj==='efire'?'#ff6622':s.proj==='eplasma'?'#44ff44':s.proj==='erocket'?'#ff4422':'#44ff66';
       sctx.beginPath(); sctx.arc(sx, bot-h*0.5, r, 0, 6.29); sctx.fill();
       sctx.fillStyle='#ffffff'; sctx.beginPath(); sctx.arc(sx, bot-h*0.5, r*0.45, 0, 6.29); sctx.fill();
       continue;
